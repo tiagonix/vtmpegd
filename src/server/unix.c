@@ -84,14 +84,14 @@ VTmpeg *unix_getvideo (void)
 
 	if (playing_mpeg > unix_list_count ()) playing_mpeg = 0;
 
-	/* se n„o tiver o primeiro video... */
+	/* se n√£o tiver o primeiro video... */
 	if (q == NULL) {
 		playing_mpeg = -1;
 		thread_unlock ();
 		return NULL;
 	}
 
-	/* se tiver, o playing_mpeg È 'pelo menos' zero */
+	/* se tiver, o playing_mpeg √© 'pelo menos' zero */
 	mpeg = g_list_nth_data (q, playing_mpeg);
 	if (mpeg == NULL) {
 		playing_mpeg = 0;

@@ -3,7 +3,7 @@
  *
  * (C) 2001 Void Technologies
  * Author: Alex Fiori <alex@void.com.br>
- * 	   Fl·vio Mendes <flv@void.com.br>
+ * 	   Fl√°vio Mendes <flv@void.com.br>
  */
 #include "VTqueue.h"
 

@@ -37,7 +37,7 @@
 /* local */
 #include "video.h"
 
-/* informações tanto do server
+/* informaÃ§Ãµes tanto do server
    quanto do client */
 #include "config.h"
 

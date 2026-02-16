@@ -7,7 +7,7 @@
    no queue */
 #define UNIX_PATH "/tmp/VTmpegd"
 
-/* tamanho m·ximo dos comandos
+/* tamanho m√°ximo dos comandos
    entre o client e o server */
 #define MAX_COMMAND_LEN 20
 
@@ -15,13 +15,13 @@
    do servidor */
 #define MAX_RESULT_LINE_LEN 2048
 
-/* definiÁıes do widget onde dever· passar o mpeg */
+/* defini√ß√µes do widget onde dever√° passar o mpeg */
 #define VIDEO_WIDTH	640
 #define VIDEO_HEIGHT	480
 #define VIDEO_DEPTH	16
 
 /*
-  especificaÁ„o do protocolo
+  especifica√ß√£o do protocolo
 
   o client envia:
   1. para listar o queue: list;

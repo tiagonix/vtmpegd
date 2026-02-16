@@ -49,7 +49,7 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 
 	if (pos > max_pos) pos = 0;
 
-	/* nunca adiciona na posiÁ„o que est· sendo passada */
+	/* nunca adiciona na posi√ß√£o que est√° sendo passada */
 	if (*playing_mpeg == pos) {
 		dprintf (fd, "%c\nPosition busy.\n%c\n",
 			 COMMAND_ERROR, COMMAND_DELIM);
@@ -99,7 +99,7 @@ GList *command_remove (int fd, GList *queue, int pos, int *playing_mpeg)
 	VTmpeg *mpeg;
 	GList *q = queue;
 
-	/* n„o remove o video que est· tocando */
+	/* n√£o remove o video que est√° tocando */
 	if (*playing_mpeg == pos) {
 		dprintf (fd, "%c\nPosition busy.\n%c\n",
 			 COMMAND_ERROR, COMMAND_DELIM);

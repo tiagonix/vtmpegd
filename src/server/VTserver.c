@@ -129,7 +129,7 @@ void finish (void)
 {
     thread_lock ();
 
-    /* para n„o ser feito por todos
+    /* para n√£o ser feito por todos
        os processos (main e thread) */
     if (already_finished) {
         thread_unlock ();
@@ -137,7 +137,7 @@ void finish (void)
     }
 
     /* se tiver algum video passando, da stop 
-       e j· limpa a lista */
+       e j√° limpa a lista */
     unix_finish ();
 
     /* remove o socket */
