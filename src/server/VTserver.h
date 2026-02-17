@@ -66,8 +66,8 @@ extern GList   *command_insert (int fd, GList *queue, const char *filename,
 extern GList   *command_remove (int fd, GList *queue, int pos, int *playing_mpeg);
 
 /* thread.c */
-extern inline void thread_lock (void);
-extern inline void thread_unlock (void);
+extern void thread_lock (void);
+extern void thread_unlock (void);
 
 /* copyright.c */
 #define		PROGRAM_DESCRIPTION "oO VTmpeg - MPEG video player daemon for Linux Oo"
@@ -76,4 +76,3 @@ extern inline void thread_unlock (void);
 extern		void show_copyright (void);
 
 #endif /* VTserver.h */
-

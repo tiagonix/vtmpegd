@@ -7,21 +7,16 @@
 
 #include "VTserver.h"
 
-pthread_cond_t  cond   = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex  = PTHREAD_MUTEX_INITIALIZER;
 
-inline void thread_lock (void)
+void thread_lock (void)
 {
-	while (pthread_mutex_trylock (&mutex) == EBUSY)
-		pthread_cond_wait (&cond, &mutex);
-	
+	pthread_mutex_lock (&mutex);
 	return;
 }
 
-inline void thread_unlock (void)
+void thread_unlock (void)
 {
 	pthread_mutex_unlock (&mutex);
-	pthread_cond_broadcast (&cond);
-
 	return;
 }
