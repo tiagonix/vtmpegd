@@ -34,8 +34,7 @@ GtkWidget *gst_player_video_new (GstElement *playbin)
     /* Connect to realize signal to pass XID to GStreamer */
     g_signal_connect(area, "realize", G_CALLBACK(realize_cb), playbin);
     
-    /* Ensure double buffering is off for video rendering to prevent flickering */
-    gtk_widget_set_double_buffered(area, FALSE);
+    /* Double buffering is handled by the compositor in GTK3+ */
     
     /* Set a reasonable default size */
     gtk_widget_set_size_request(area, 640, 480);

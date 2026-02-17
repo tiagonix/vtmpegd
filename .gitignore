@@ -1,1 +1,3 @@
 *.o
+src/client/VTqueue
+src/server/VTserver

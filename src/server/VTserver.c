@@ -38,13 +38,33 @@ int main (int argc, char **argv)
 {
     GtkWidget *win;
     gint r;
-
-    /* Initialize GTK and GStreamer */
-    /* Handled inside md_gst_init or prior to it */
-    /* Actually better to init them here or pass pointers */
-    /* md_gst_init will call gst_init */
+    int c;
+    int loop_enabled = 0;
+    int watermark_enabled = 0;
     
+    /* Initialize GTK first (it strips GTK-specific options) */
     gtk_init(&argc, &argv);
+
+    /* Parse our own options */
+    struct option long_options[] = {
+        {"loop",      no_argument, 0, 'l'},
+        {"watermark", no_argument, 0, 'w'},
+        {0, 0, 0, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "lw", long_options, NULL)) != -1) {
+        switch (c) {
+            case 'l':
+                loop_enabled = 1;
+                break;
+            case 'w':
+                watermark_enabled = 1;
+                break;
+            default:
+                /* Ignore unknown options, they might be for GStreamer */
+                break;
+        }
+    }
 
     win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(win), "Video Daemon");
@@ -56,7 +76,7 @@ int main (int argc, char **argv)
     /* Show before init to ensure window XID is available if needed */
     gtk_widget_show_all(win);
 
-    r = md_gst_init(&argc, &argv, win);
+    r = md_gst_init(&argc, &argv, win, loop_enabled, watermark_enabled);
     if(r < 0) {
         g_printerr("md_gst_init() failed, aborting.\n");
         gtk_widget_destroy(GTK_WIDGET(win));
