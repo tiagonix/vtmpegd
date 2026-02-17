@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <getopt.h>
 
 /* GTK/gdk */
 #include <gtk/gtk.h>
@@ -48,7 +49,7 @@ typedef struct {
 } VTmpeg;
 
 /* gst-backend.c */
-extern gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win);
+extern gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, int watermark_enabled);
 extern gint md_gst_play(char *uri);
 extern gint md_gst_finish(void);
 extern int md_gst_is_playing(void);

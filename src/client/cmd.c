@@ -23,7 +23,8 @@ int send_cmd(int fd, const char *cmd)
    	if (!cmd)
 	   	return -1;
 	
-	if (!dprintf(fd, cmd))
+    /* SECURITY FIX: Use %s to prevent format string attacks */
+	if (!dprintf(fd, "%s", cmd))
 	   	return -1;
 	//usleep(500);
 
