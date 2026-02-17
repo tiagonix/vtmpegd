@@ -1,16 +1,8 @@
 /*
- * TODO - commands:
+ * $Id: VTqueue.c,v 1.12 2001/11/13 18:31:33 alex Exp $
  *
- * COMMAND_LIST    1
- * COMMAND_INSERT  2
- * COMMAND_REMOVE  3
- * COMMAND_PLAY    4
- * COMMAND_PAUSE   5
- * COMMAND_STOP    6
- * COMMAND_NEXT    7
- * COMMAND_PREV    8
- * COMMAND_MUTE    9
- *
+ * (C) 2001 Void Technologies
+ * Author: Alex Fiori <alex@void.com.br>
  */
 
 #include "VTqueue.h"
@@ -152,7 +144,9 @@ int main(int argc, char **argv)
         }
     }
 
-    if((cmd.cmd == ADD && (strlen(cmd.uri) < 2 || cmd.idx < 0)) || 
+    /* Validation: ADD commands only require a URI (default idx is -1).
+       REM commands require a valid position index. */
+    if((cmd.cmd == ADD && strlen(cmd.uri) < 2) || 
             (cmd.cmd == REM && (strlen(cmd.uri) < 2 || cmd.idx < 0)))
         show_help();
 

@@ -47,10 +47,13 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 	GList *q = queue;
 	VTmpeg *mpeg = (VTmpeg *) malloc (sizeof (VTmpeg));
 
-	if (pos > max_pos) pos = 0;
+	/* Normalize the "append" signal. 
+	   Both 0 and -1 (client default) mean "append to the end". */
+	if (pos <= 0 || pos > max_pos) pos = 0;
 
-	/* nunca adiciona na posição que está sendo passada */
-	if (*playing_mpeg == pos) {
+	/* Never allow adding/inserting into the position currently being played.
+	   Append operations (pos 0) are always safe. */
+	if (pos > 0 && *playing_mpeg == pos) {
 		dprintf (fd, "%c\nPosition busy.\n%c\n",
 			 COMMAND_ERROR, COMMAND_DELIM);
 		free(mpeg);
