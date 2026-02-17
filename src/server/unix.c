@@ -54,7 +54,7 @@ int unix_server (void)
 	struct sockaddr_un s;
 
 	s.sun_family = AF_UNIX;
-	snprintf (s.sun_path, sizeof (s.sun_path), unix_sockname ()); 
+	snprintf (s.sun_path, sizeof (s.sun_path), "%s", unix_sockname ()); 
 
 	if ((fd = socket (AF_UNIX, SOCK_STREAM, 0)) < 0) return 0;
 	if (bind (fd, (struct sockaddr *) &s, sizeof (s)) < 0) return 0;
@@ -70,7 +70,8 @@ int unix_server (void)
 
 	/* cria o symlink pra esse server */
 	unlink (UNIX_PATH);
-	symlink (unix_sockname (), UNIX_PATH);
+	if (symlink (unix_sockname (), UNIX_PATH) < 0)
+        perror("symlink");
 
 	return 1;
 }
@@ -141,7 +142,8 @@ void unix_finish (void)
 void *unix_loop (void *arg)
 {
 	fd_set fds;
-	int fd, cfd, len;
+	int fd, cfd;
+    socklen_t len;
 	struct timeval tv;
 	struct sockaddr_un s;
 

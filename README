@@ -8,12 +8,11 @@ VTmpeg is divided in two parts:
 
 REQUIREMENTS TO BUILD
 
-gstreamer 0.8 and gtk 2 development libraries.
+gstreamer 1.0 and gtk 3 development libraries.
 
-Packages on Debian:
-libgtk2.0-dev libglib2.0-dev libgstreamer0.8-dev libgstreamer-plugins0.8-dev
+Packages on Debian/Ubuntu:
+libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
 REQUIREMENTS TO RUN
 
-gtk 2 and gstreamer runtime libraries.
-
+gtk 3 and gstreamer 1.0 runtime libraries (plugins-good, plugins-bad, plugins-ugly depending on media).
