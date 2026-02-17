@@ -2,7 +2,7 @@
  * $Id: thread.c,v 1.3 2001/11/13 17:05:13 alex Exp $
  *
  * (C) 2001 Void Technologies
- * Author: Alex Fiori <alex@void.com.br>
+ * Author: Alex Fiori <fiorix@gmail.com>
  */
 
 #include "VTserver.h"

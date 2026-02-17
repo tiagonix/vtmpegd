@@ -2,7 +2,7 @@
  * $Id: VTqueue.c,v 1.12 2001/11/13 18:31:33 alex Exp $
  *
  * (C) 2001 Void Technologies
- * Author: Alex Fiori <alex@void.com.br>
+ * Author: Alex Fiori <fiorix@gmail.com>
  */
 
 #include "VTqueue.h"
