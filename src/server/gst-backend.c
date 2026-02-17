@@ -1,142 +1,130 @@
 #include "VTserver.h"
 
-static GtkWidget  *vbox;
-static GstElement *play;
-static GstElement *videosink;
+static GstElement *playbin;
+static GstBus     *bus;
+static guint       bus_watch_id;
+static GtkWidget  *video_widget;
 
 int md_gst_is_playing(void)
 {
-    return (gst_element_get_state(play) == GST_STATE_PLAYING) ? 1 : 0;
+    GstState current, pending;
+    if (!playbin) return 0;
+    
+    gst_element_get_state(playbin, &current, &pending, 0);
+    return (current == GST_STATE_PLAYING || pending == GST_STATE_PLAYING) ? 1 : 0;
 }
 
-static void cb_eos (GstElement *play, gpointer data)
+static void on_about_to_finish(GstElement *playbin, gpointer data)
 {
-    gst_element_set_state(play, GST_STATE_NULL);
+    VTmpeg *mpeg;
+    
+    /* This signal is emitted from a streaming thread.
+       We need to be careful. unix_getvideo locks a mutex. */
+    
+    mpeg = unix_getvideo();
+    if (mpeg) {
+        g_printerr("Gapless transition to: %s\n", mpeg->filename);
+        g_object_set(G_OBJECT(playbin), "uri", mpeg->filename, NULL);
+    }
 }
 
-    static void
-cb_error (GstElement *play,
-        GstElement *src,
-        GError     *err,
-        gchar      *debug,
-        gpointer    data)
+static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
 {
-    g_print ("Error: %s\n", err->message);
+    switch (GST_MESSAGE_TYPE(msg)) {
+        case GST_MESSAGE_EOS: {
+            VTmpeg *mpeg;
+            g_printerr("End of stream\n");
+            
+            /* If about-to-finish didn't catch a new video (or queue was empty then but not now),
+               try to play next one manually or stop */
+            mpeg = unix_getvideo();
+            if (mpeg) {
+                g_printerr("Playing next: %s\n", mpeg->filename);
+                md_gst_play(mpeg->filename);
+            } else {
+                gst_element_set_state(playbin, GST_STATE_NULL);
+            }
+            break;
+        }
+        case GST_MESSAGE_ERROR: {
+            gchar  *debug;
+            GError *error;
+
+            gst_message_parse_error(msg, &error, &debug);
+            g_free(debug);
+
+            g_printerr("Error: %s\n", error->message);
+            g_error_free(error);
+
+            gst_element_set_state(playbin, GST_STATE_NULL);
+            break;
+        }
+        default:
+            break;
+    }
+
+    return TRUE;
 }
 
 gint md_gst_play(char *uri)
 {
+    gchar *real_uri;
     g_return_val_if_fail(uri, -1);
-    g_object_set(G_OBJECT(play), "uri", uri, NULL);
-    if(GST_IS_ELEMENT(play))
-        gst_element_set_state(play, GST_STATE_PLAYING);
-    return 0;
-}
 
-gint md_gst_play_loop(char *uri)
-{
-    g_return_val_if_fail(uri, -1);
-    g_object_set(G_OBJECT(play), "uri", uri, NULL);
-    if(GST_IS_ELEMENT(play))
-        gst_element_set_state(play, GST_STATE_PLAYING);
+    /* Basic check to see if it's already a URI protocol */
+    if (strstr(uri, "://")) {
+        real_uri = g_strdup(uri);
+    } else {
+        real_uri = g_strdup_printf("file://%s", uri);
+    }
 
-    //while(gst_element_get_state(play) == GST_STATE_PLAYING && !done_playing) usleep(800000);
-    while(!md_gst_is_playing()) usleep(400000);
+    g_object_set(G_OBJECT(playbin), "uri", real_uri, NULL);
+    g_free(real_uri);
+
+    if(GST_IS_ELEMENT(playbin))
+        gst_element_set_state(playbin, GST_STATE_PLAYING);
     return 0;
 }
 
 gint md_gst_finish(void)
 {
-    gst_object_unref(GST_OBJECT(videosink));
-    gst_object_unref(GST_OBJECT(play));
-    g_object_unref(vbox);
+    if (bus_watch_id > 0)
+        g_source_remove(bus_watch_id);
+    
+    gst_element_set_state(playbin, GST_STATE_NULL);
+    gst_object_unref(GST_OBJECT(playbin));
+    //g_object_unref(vbox); // managed by GTK container
     return 0;
 }
 
-/*
- * Calls gst-register-0.8
- *
- * I know glib already has its own pipes API,
- * but I don't care, as I trust POSIX.
- */
-static int md_gst_register(void)
-{
-    gchar  cmd[] = "/usr/bin/gst-register-0.8";
-    gchar  buffer[512];
-    FILE *fp;
-
-    g_printerr("Assuming gst-register-0.8 to be on /usr/bin, which is the default on "
-            "Debian systems\n");
-
-    if((fp = popen(cmd, "r")) == NULL) {
-        g_printerr("popen() failed: %s\n", strerror(errno));
-        return 1;
-    }
-
-    /* read from pipe until reach EOF */
-    while(!feof(fp)) {
-        memset(&buffer, 0, sizeof (buffer));
-        fgets(buffer, sizeof (buffer), fp);
-        if((strncmp(buffer, "Loaded", 6)) == 0) {
-            g_printerr("Successfully registered the available plugins.\n");
-            g_printerr("%s\n", buffer);
-        }
-    }
-
-    /* close pipe fd */
-    pclose(fp);
-    return 0;
-}
-
-/* XXX remember to g_object_unref() what must be freed XXX */
-gint md_gst_init(gint argc, gchar **argv, GtkWidget *win)
+gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win)
 {
     /* init GStreamer */
-    gst_init (&argc, &argv);
+    gst_init(argc, argv);
 
-    /* make sure we have a URI */
-    if (argc < 2) {
-        g_print ("Usage: %s <URI>\n", argv[0]);
+    playbin = gst_element_factory_make("playbin", "play");
+    if (!playbin) {
+        g_printerr("Failed to create 'playbin' element.\n");
         return -1;
     }
 
-    /* set up */
-    play = gst_element_factory_make ("playbin", "play");
-    if(!GST_IS_ELEMENT(play)) {
-        g_printerr("gst_element_factory_make() failed, you probably don't have runned "
-                "gst-register-0.8 yet.\n"
-                "I'm going to try it for you.\n");
-        if(md_gst_register()) {
-            g_printerr("Sorry, it didn't work out. Please check your gstreamer installation.\n");
-            gst_main_quit();
-            return -1;
-        } else {
-            return 1;
-        }
+    /* Set up bus watch */
+    bus = gst_pipeline_get_bus(GST_PIPELINE(playbin));
+    bus_watch_id = gst_bus_add_watch(bus, bus_call, NULL);
+    gst_object_unref(bus);
+
+    /* Signal for gapless playback */
+    g_signal_connect(playbin, "about-to-finish", G_CALLBACK(on_about_to_finish), NULL);
+
+    /* Create video widget */
+    video_widget = gst_player_video_new(playbin);
+    if (!video_widget) {
+        g_printerr("Failed to create video widget.\n");
+        return -1;
     }
-    g_signal_connect (play, "eos", G_CALLBACK (cb_eos), NULL);
-    g_signal_connect (play, "error", G_CALLBACK (cb_error), NULL);
+    
+    gtk_container_add(GTK_CONTAINER(win), video_widget);
+    gtk_widget_show(video_widget);
 
-    g_printerr("\nXXXXXXXX WARNING: don't forget to change videosink to xvimagesink XXXXXXXXXXXXXXX\n\n");
-    videosink = gst_element_factory_make("xvimagesink", "videosink");
-    g_object_set(G_OBJECT(play), "video-sink", videosink, NULL);
-
-    /* XXX choose what widget to put the video into. XXX
-       vbox=gtk_vbox_new(TRUE,5);
-     */
-    vbox = gst_player_video_new(videosink,play); 
-
-    if(!vbox) {
-        g_printerr("gst_player_video_new() failed, aborting.\n");
-        exit(EXIT_FAILURE);
-    }
-    /* XXX I have no idea on how to change the video size. If needed, might adding a filter
-     * be a good idea ? XXX */
-    gtk_container_add(GTK_CONTAINER(win), vbox);
-
-    //g_object_set(G_OBJECT(play), "uri", argv[1], NULL);
-    gst_element_set_state(play, GST_STATE_PAUSED);
-
-    gtk_widget_show(vbox);
     return 0;
 }

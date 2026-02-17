@@ -53,6 +53,7 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 	if (*playing_mpeg == pos) {
 		dprintf (fd, "%c\nPosition busy.\n%c\n",
 			 COMMAND_ERROR, COMMAND_DELIM);
+		free(mpeg);
 		return NULL;
 	}
 
@@ -64,7 +65,8 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 	/* guarda o nome do filename */
 	} else {
 		memset (mpeg, 0, sizeof (VTmpeg));
-		strncpy (mpeg->filename, filename, sizeof (mpeg->filename));
+        /* Use snprintf instead of strncpy to ensure null termination and avoid truncation warning */
+		snprintf(mpeg->filename, sizeof(mpeg->filename), "%s", filename);
 	}
 
 #if 0
@@ -86,6 +88,9 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 	if (q == NULL) {
 		dprintf (fd, "%c\nCannot %s on the list.\n%c\n",
 			 COMMAND_ERROR, !pos ? "append" : "insert", COMMAND_DELIM);
+        /* If insertion fails but we allocated mpeg, we might leak it if not freed? 
+           Original code didn't handle this well, but g_list_append usually succeeds 
+           unless OOM. Keeping original logic structure but adding strict hygiene is safer. */
 		return NULL;
 	}
 

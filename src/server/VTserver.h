@@ -25,14 +25,15 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 /* GTK/gdk */
 #include <gtk/gtk.h>
-#include <gdk/gdkx.h>
+#include <gdk/gdk.h>
 
 /* GStreamer */
 #include <gst/gst.h>
-#include <gst/xoverlay/xoverlay.h>
+#include <gst/video/videooverlay.h>
 
 /* local */
 #include "video.h"
@@ -47,10 +48,10 @@ typedef struct {
 } VTmpeg;
 
 /* gst-backend.c */
-extern gint md_gst_init(gint argc, gchar **argv, GtkWidget *win);
+extern gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win);
 extern gint md_gst_play(char *uri);
-extern gint md_gst_play_loop(char *uri);
 extern gint md_gst_finish(void);
+extern int md_gst_is_playing(void);
 
 /* unix.c */
 extern char    *unix_sockname (void);
