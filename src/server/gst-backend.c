@@ -45,8 +45,7 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
 {
     /* Handle window embedding request synchronously. 
        This is critical for GStreamer 1.0 playbin transitions. */
-    if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ELEMENT &&
-        gst_message_has_name(msg, "prepare-window-handle")) {
+    if (gst_is_video_overlay_prepare_window_handle_message(msg)) {
         
         GstElement *src = GST_MESSAGE_SRC(msg);
         if (g_window_handle != 0 && GST_IS_VIDEO_OVERLAY(src)) {
@@ -206,7 +205,7 @@ gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, in
         /* Create a bin with scaling and watermark capabilities.
            Order: Convert -> Scale (Nearest Neighbor for CPU savings on 4K) -> Cap -> Overlay -> Sink */
         video_sink_bin = gst_parse_bin_from_description(
-            "videoconvert ! videoscale method=0 ! video/x-raw,width=720,height=480 ! cairooverlay name=overlay ! autovideosink", 
+            "videoconvert ! videoscale method=0 ! cairooverlay name=overlay ! autovideosink", 
             TRUE, NULL);
 
         if (video_sink_bin) {
