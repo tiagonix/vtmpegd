@@ -11,6 +11,19 @@ static int g_loop_enabled = 0;
 static int g_watermark_enabled = 0;
 static char *g_current_uri = NULL;
 static guintptr g_window_handle = 0;
+static gboolean g_using_gtksink = FALSE;
+
+/*
+ * Transition flag to prevent EOS/Signal races.
+ * Accessed from:
+ *  - streaming thread (about-to-finish)
+ *  - main thread (bus watch)
+ *
+ * Use atomics.
+ * 1 = next URI scheduled via about-to-finish
+ * 0 = no transition scheduled
+ */
+static gint g_next_uri_scheduled = 0;
 
 /* Internal helper to ensure a path has a URI scheme */
 static char *ensure_uri_scheme(const char *uri)
@@ -20,6 +33,7 @@ static char *ensure_uri_scheme(const char *uri)
     if (strstr(uri, "://")) {
         return g_strdup(uri);
     } else {
+        /* NOTE: For best practice, consider g_filename_to_uri() later. */
         return g_strdup_printf("file://%s", uri);
     }
 }
@@ -28,28 +42,62 @@ int md_gst_is_playing(void)
 {
     GstState current, pending;
     if (!playbin) return 0;
-    
+
     gst_element_get_state(playbin, &current, &pending, 0);
     return (current == GST_STATE_PLAYING || pending == GST_STATE_PLAYING) ? 1 : 0;
+}
+
+gboolean md_gst_is_stopped(void)
+{
+    GstState current = GST_STATE_NULL, pending = GST_STATE_NULL;
+
+    if (!playbin) return TRUE;
+
+    /* IMPORTANT:
+     * With timeout=0, gst_element_get_state() can return ASYNC even when current
+     * is already READY/NULL. For startup gating we only care about current state,
+     * not the return code.
+     */
+    gst_element_get_state(playbin, &current, &pending, 0);
+
+    /* Consider READY as "stopped enough" for safe start. */
+    return (current == GST_STATE_NULL || current == GST_STATE_READY) ? TRUE : FALSE;
 }
 
 void md_gst_set_window_handle(guintptr handle)
 {
     g_window_handle = handle;
-    if (playbin && GST_IS_VIDEO_OVERLAY(playbin)) {
+    if (playbin && GST_IS_VIDEO_OVERLAY(playbin) && !g_using_gtksink) {
         gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(playbin), g_window_handle);
     }
 }
 
 static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer data)
 {
-    /* Handle window embedding request synchronously. 
-       This is critical for GStreamer 1.0 playbin transitions. */
+    (void)bus; (void)data;
+
+    /* Only handle sync XID embedding if we are NOT using a native GTK sink */
+    if (g_using_gtksink)
+        return GST_BUS_PASS;
+
     if (gst_is_video_overlay_prepare_window_handle_message(msg)) {
-        
-        GstElement *src = GST_MESSAGE_SRC(msg);
-        if (g_window_handle != 0 && GST_IS_VIDEO_OVERLAY(src)) {
-            gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(src), g_window_handle);
+        if (g_window_handle != 0) {
+	    GstObject *src = GST_MESSAGE_SRC(msg);
+
+            /* Normal case: message source is the overlay-capable sink. */
+            if (GST_IS_VIDEO_OVERLAY(src)) {
+                gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(src), g_window_handle);
+            } else {
+                /* Fallback: try the current playbin video-sink (some graphs emit from a bin/child). */
+                GstElement *vsink = NULL;
+                g_object_get(G_OBJECT(playbin), "video-sink", &vsink, NULL);
+                if (vsink) {
+                    if (GST_IS_VIDEO_OVERLAY(vsink)) {
+                        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(vsink), g_window_handle);
+                    }
+                    gst_object_unref(GST_OBJECT(vsink));
+                }
+            }
         }
     }
 
@@ -58,6 +106,8 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
 
 static void draw_overlay(GstElement *overlay, cairo_t *cr, guint64 timestamp, guint64 duration, gpointer data)
 {
+    (void)overlay; (void)timestamp; (void)duration; (void)data;
+
     if (!g_watermark_enabled) return;
 
     double x1, y1, x2, y2;
@@ -85,18 +135,22 @@ static void draw_overlay(GstElement *overlay, cairo_t *cr, guint64 timestamp, gu
     cairo_show_text(cr, text);
 }
 
-static void on_about_to_finish(GstElement *playbin, gpointer data)
+static void on_about_to_finish(GstElement *playbin_local, gpointer data)
 {
+    (void)playbin_local; (void)data;
+
     VTmpeg *mpeg;
     char *new_uri = NULL;
-    
-    /* This signal is emitted from a streaming thread. */
+
+    /*
+     * SINGLE AUTHORITY for queue advancement.
+     * This runs in the streaming thread. No GTK calls allowed.
+     */
     mpeg = unix_getvideo();
     if (mpeg) {
         g_printerr("Gapless transition to: %s\n", mpeg->filename);
         new_uri = ensure_uri_scheme(mpeg->filename);
     } else if (g_loop_enabled && g_current_uri) {
-        /* Loop the current video if queue is empty */
         g_printerr("Queue empty, looping: %s\n", g_current_uri);
         new_uri = g_strdup(g_current_uri);
     }
@@ -106,42 +160,68 @@ static void on_about_to_finish(GstElement *playbin, gpointer data)
         g_current_uri = g_strdup(new_uri);
         g_object_set(G_OBJECT(playbin), "uri", g_current_uri, NULL);
         g_free(new_uri);
+
+        /* Mark transition as active so EOS doesn't stop pipeline */
+        g_atomic_int_set(&g_next_uri_scheduled, 1);
+    } else {
+        g_atomic_int_set(&g_next_uri_scheduled, 0);
     }
 }
 
-static gboolean bus_call(GstBus *bus, GstMessage *msg, gpointer data)
+static gboolean bus_call(GstBus *bus_local, GstMessage *msg, gpointer data)
 {
+    (void)bus_local; (void)data;
+
     switch (GST_MESSAGE_TYPE(msg)) {
+
+        case GST_MESSAGE_STATE_CHANGED: {
+            /* Clear transition flag when the *new* clip reaches PLAYING.
+               This is essential because in true gapless playback you often
+               do NOT get EOS between items. */
+            if (GST_MESSAGE_SRC(msg) == GST_OBJECT(playbin)) {
+                GstState old_s, new_s, pending_s;
+                gst_message_parse_state_changed(msg, &old_s, &new_s, &pending_s);
+
+                if (new_s == GST_STATE_PLAYING && g_atomic_int_get(&g_next_uri_scheduled) == 1) {
+                    g_printerr("Transition committed (PLAYING). Clearing transition flag.\n");
+                    g_atomic_int_set(&g_next_uri_scheduled, 0);
+                }
+            }
+            break;
+        }
+
         case GST_MESSAGE_EOS: {
-            VTmpeg *mpeg;
             g_printerr("End of stream\n");
-            
-            /* If about-to-finish didn't catch it, handle transition or stop */
-            mpeg = unix_getvideo();
-            if (mpeg) {
-                g_printerr("Playing next: %s\n", mpeg->filename);
-                md_gst_play(mpeg->filename);
-            } else if (g_loop_enabled && g_current_uri) {
-                g_printerr("Queue empty, looping (EOS): %s\n", g_current_uri);
-                md_gst_play(g_current_uri);
+
+            /* Deterministic EOS logic:
+               - If transition flag is set, ignore EOS for pipeline-stop purposes.
+               - If not set, we are at end of playlist: stop pipeline. */
+            if (g_atomic_int_get(&g_next_uri_scheduled) == 1) {
+                g_printerr("Ignoring EOS (transition active)\n");
+                /* Clear just in case this EOS was actually emitted (non-gapless path) */
+                g_atomic_int_set(&g_next_uri_scheduled, 0);
             } else {
+                g_printerr("Playlist finished. Stopping.\n");
                 gst_element_set_state(playbin, GST_STATE_NULL);
             }
             break;
         }
+
         case GST_MESSAGE_ERROR: {
-            gchar  *debug;
-            GError *error;
+            gchar  *debug = NULL;
+            GError *error = NULL;
 
             gst_message_parse_error(msg, &error, &debug);
             g_free(debug);
 
-            g_printerr("Error: %s\n", error->message);
-            g_error_free(error);
+            g_printerr("Error: %s\n", error ? error->message : "(unknown)");
+            if (error) g_error_free(error);
 
             gst_element_set_state(playbin, GST_STATE_NULL);
+            g_atomic_int_set(&g_next_uri_scheduled, 0);
             break;
         }
+
         default:
             break;
     }
@@ -163,8 +243,9 @@ gint md_gst_play(char *uri)
     g_object_set(G_OBJECT(playbin), "uri", real_uri, NULL);
     g_free(real_uri);
 
-    if(GST_IS_ELEMENT(playbin))
+    if (GST_IS_ELEMENT(playbin))
         gst_element_set_state(playbin, GST_STATE_PLAYING);
+
     return 0;
 }
 
@@ -172,80 +253,164 @@ gint md_gst_finish(void)
 {
     if (bus_watch_id > 0)
         g_source_remove(bus_watch_id);
-    
-    gst_element_set_state(playbin, GST_STATE_NULL);
-    gst_object_unref(GST_OBJECT(playbin));
-    
+
+    if (playbin) {
+        gst_element_set_state(playbin, GST_STATE_NULL);
+        gst_object_unref(GST_OBJECT(playbin));
+        playbin = NULL;
+    }
+
     if (g_current_uri) {
         g_free(g_current_uri);
         g_current_uri = NULL;
     }
+
+    g_atomic_int_set(&g_next_uri_scheduled, 0);
     return 0;
 }
 
 gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, int watermark_enabled)
 {
+    GstElement *sink = NULL;
+    gboolean using_modern_sink = FALSE;
+
     /* Store feature flags */
     g_loop_enabled = loop_enabled;
     g_watermark_enabled = watermark_enabled;
 
-    /* init GStreamer */
     gst_init(argc, argv);
 
-    playbin = gst_element_factory_make("playbin", "play");
+    /* Modern Playback: try playbin3 first */
+    if (gst_element_factory_find("playbin3")) {
+        playbin = gst_element_factory_make("playbin3", "play");
+    } else {
+        playbin = gst_element_factory_make("playbin", "play");
+    }
+
     if (!playbin) {
-        g_printerr("Failed to create 'playbin' element.\n");
+        g_printerr("Failed to create playback element.\n");
         return -1;
     }
 
-    /* Configure Overlay if enabled */
-    if (g_watermark_enabled) {
-        GstElement *video_sink_bin;
-        
-        /* Create a bin with scaling and watermark capabilities.
-           Order: Convert -> Scale (Nearest Neighbor for CPU savings on 4K) -> Cap -> Overlay -> Sink */
-        video_sink_bin = gst_parse_bin_from_description(
-            "videoconvert ! videoscale method=0 ! cairooverlay name=overlay ! autovideosink", 
-            TRUE, NULL);
+    /*
+     * Modern Embedding Path A: Try gtkglsink -> gtksink
+     */
+    if ((sink = gst_element_factory_make("gtkglsink", "gtkglsink_elt"))) {
+        using_modern_sink = TRUE;
+    } else if ((sink = gst_element_factory_make("gtksink", "gtksink_elt"))) {
+        using_modern_sink = TRUE;
+    }
 
-        if (video_sink_bin) {
-            GstElement *overlay = gst_bin_get_by_name(GST_BIN(video_sink_bin), "overlay");
-            if (overlay) {
-                g_signal_connect(overlay, "draw", G_CALLBACK(draw_overlay), NULL);
-                gst_object_unref(overlay);
-                
-                /* Set the custom bin as the video sink for playbin */
-                g_object_set(G_OBJECT(playbin), "video-sink", video_sink_bin, NULL);
+    if (using_modern_sink && sink) {
+        GstElement *sink_bin = NULL;
+        GstElement *convert = NULL, *scale = NULL, *overlay = NULL;
+
+        sink_bin = gst_bin_new("sink_bin");
+        convert  = gst_element_factory_make("videoconvert", NULL);
+        scale    = gst_element_factory_make("videoscale", NULL);
+        overlay  = gst_element_factory_make("cairooverlay", "overlay");
+
+        if (sink_bin && convert && scale && overlay) {
+            gboolean ok_pad = FALSE;
+
+            gst_bin_add_many(GST_BIN(sink_bin), convert, scale, overlay, sink, NULL);
+            if (!gst_element_link_many(convert, scale, overlay, sink, NULL)) {
+                g_printerr("Failed to link sink bin elements, falling back.\n");
+                gst_object_unref(GST_OBJECT(sink_bin));
+                sink_bin = NULL;
             } else {
-                g_printerr("Warning: Could not find 'overlay' in sink bin. Watermark disabled.\n");
+                GstPad *target_pad = gst_element_get_static_pad(convert, "sink");
+                if (target_pad) {
+                    GstPad *ghost_pad = gst_ghost_pad_new("sink", target_pad);
+                    gst_object_unref(target_pad);
+
+                    if (ghost_pad) {
+                        if (gst_element_add_pad(sink_bin, ghost_pad)) {
+                            ok_pad = TRUE;
+                        } else {
+                            g_printerr("Failed to add ghost pad to sink bin, falling back.\n");
+                            gst_object_unref(GST_OBJECT(ghost_pad));
+                        }
+                    } else {
+                        g_printerr("Failed to create ghost pad, falling back.\n");
+                    }
+                } else {
+                    g_printerr("Failed to get convert sink pad, falling back.\n");
+                }
+
+                if (!ok_pad) {
+                    gst_object_unref(GST_OBJECT(sink_bin));
+                    sink_bin = NULL;
+                }
+            }
+
+            if (sink_bin) {
+                g_object_get(sink, "widget", &video_widget, NULL);
+                if (video_widget) {
+                    g_using_gtksink = TRUE;
+
+                    gtk_container_add(GTK_CONTAINER(win), video_widget);
+                    gtk_widget_show(video_widget);
+
+                    /* Drop our ref; container holds one now */
+                    g_object_unref(video_widget);
+
+                    if (g_watermark_enabled)
+                        g_signal_connect(overlay, "draw", G_CALLBACK(draw_overlay), NULL);
+
+                    g_object_set(G_OBJECT(playbin), "video-sink", sink_bin, NULL);
+                } else {
+                    g_printerr("Failed to get gtksink widget, falling back.\n");
+                    gst_object_unref(GST_OBJECT(sink_bin));
+                    /* keep g_using_gtksink FALSE => fallback path B */
+                }
             }
         } else {
-            g_printerr("Warning: Failed to create overlay sink bin (missing plugins?). Watermark disabled.\n");
+            g_printerr("Failed to create bin elements, falling back.\n");
+            if (sink_bin) gst_object_unref(GST_OBJECT(sink_bin));
         }
     }
 
-    /* Set up bus */
+    /*
+     * Fallback Embedding Path B: Legacy GstVideoOverlay (via video.c)
+     */
+    if (!g_using_gtksink) {
+        g_printerr("Modern sinks not available or failed, using fallback embedding.\n");
+        video_widget = gst_player_video_new(playbin);
+        if (video_widget) {
+            gtk_container_add(GTK_CONTAINER(win), video_widget);
+            gtk_widget_show(video_widget);
+
+            if (g_watermark_enabled) {
+                GstElement *video_sink_bin = gst_parse_bin_from_description(
+                    "videoconvert ! videoscale method=0 ! cairooverlay name=overlay ! autovideosink",
+                    TRUE, NULL);
+
+                if (video_sink_bin) {
+                    GstElement *ov = gst_bin_get_by_name(GST_BIN(video_sink_bin), "overlay");
+                    if (ov) {
+                        g_signal_connect(ov, "draw", G_CALLBACK(draw_overlay), NULL);
+                        gst_object_unref(GST_OBJECT(ov));
+                        g_object_set(G_OBJECT(playbin), "video-sink", video_sink_bin, NULL);
+                    }
+                }
+            }
+        }
+    }
+
     bus = gst_pipeline_get_bus(GST_PIPELINE(playbin));
-    
-    /* 1. Synchronous handler for window embedding */
+
+    /* Synchronous handler (only active if !g_using_gtksink) */
     gst_bus_set_sync_handler(bus, bus_sync_handler, NULL, NULL);
 
-    /* 2. Asynchronous watch for state changes/EOS/errors */
+    /* Async watch for state changes/EOS/errors */
     bus_watch_id = gst_bus_add_watch(bus, bus_call, NULL);
-    gst_object_unref(bus);
+    gst_object_unref(GST_OBJECT(bus));
 
-    /* Signal for gapless playback */
     g_signal_connect(playbin, "about-to-finish", G_CALLBACK(on_about_to_finish), NULL);
 
-    /* Create video widget */
-    video_widget = gst_player_video_new(playbin);
-    if (!video_widget) {
-        g_printerr("Failed to create video widget.\n");
-        return -1;
-    }
-    
-    gtk_container_add(GTK_CONTAINER(win), video_widget);
-    gtk_widget_show(video_widget);
+    /* Start clean */
+    g_atomic_int_set(&g_next_uri_scheduled, 0);
 
     return 0;
 }

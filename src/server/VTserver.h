@@ -8,7 +8,6 @@
 #ifndef _MAIN_H
 #define _MAIN_H 1
 
-/* leia /usr/include/features.h */
 #define _GNU_SOURCE 1
 
 #include <stdio.h>
@@ -38,44 +37,45 @@
 
 /* local */
 #include "video.h"
-
-/* informações tanto do server
-   quanto do client */
 #include "config.h"
 
 typedef struct {
-	char		filename[1024];
-	int		played;
+    char filename[1024];
+    int  played;
 } VTmpeg;
 
 /* gst-backend.c */
 extern gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, int watermark_enabled);
 extern gint md_gst_play(char *uri);
 extern gint md_gst_finish(void);
-extern int md_gst_is_playing(void);
+extern int  md_gst_is_playing(void);
 extern void md_gst_set_window_handle(guintptr handle);
+extern gboolean md_gst_is_stopped(void);
 
 /* unix.c */
-extern char    *unix_sockname (void);
-extern int	unix_server (void);
-extern VTmpeg  *unix_getvideo (void);
-extern int      unix_get_command (void);
-extern void     unix_finish (void);
+extern char   *unix_sockname (void);
+extern int     unix_server   (void);
+extern VTmpeg *unix_getvideo (void);
+extern int     unix_get_command (void);
+extern void    unix_finish   (void);
 
 /* commands.c */
-extern void     command_list (int fd, GList *queue, int playing_mpeg);
-extern GList   *command_insert (int fd, GList *queue, const char *filename,
-				int pos, int *playing_mpeg, int max_pos);
-extern GList   *command_remove (int fd, GList *queue, int pos, int *playing_mpeg);
+extern void   command_list   (int fd, GList *queue, int playing_mpeg);
+extern GList *command_insert (int fd, GList *queue, const char *filename, int pos, int *playing_mpeg, int max_pos);
+extern GList *command_remove (int fd, GList *queue, int pos, int *playing_mpeg);
 
 /* thread.c */
-extern void thread_lock (void);
+extern void thread_lock   (void);
 extern void thread_unlock (void);
 
+/* VTserver.c helpers */
+extern void start_playback_request(void);
+
 /* copyright.c */
-#define		PROGRAM_DESCRIPTION "oO VTmpeg - MPEG video player daemon for Linux Oo"
-#define     PROGRAM_AUTHORS     "  Alexandre Fiori - <fiorix@gmail.com>\n" \
-                                "  Arnaldo Pereira - <egghunt@gmail.com>\n"
-extern		void show_copyright (void);
+#define PROGRAM_DESCRIPTION "oO VTmpeg - MPEG video player daemon for Linux Oo"
+#define PROGRAM_AUTHORS     "  Alexandre Fiori - <fiorix@gmail.com>\n" \
+                            "  Arnaldo Pereira - <egghunt@gmail.com>\n" \
+                            "  Thiago Martins  - <thiagocmc@proton.me>\n"
+extern void show_copyright (void);
 
 #endif /* VTserver.h */

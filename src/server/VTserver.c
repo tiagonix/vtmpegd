@@ -17,21 +17,35 @@ void show_copyright(void)
     g_printerr(PROGRAM_AUTHORS "\n");
 }
 
-/* Lightweight poller to start playback if stopped */
-static gboolean check_queue_startup(gpointer data)
+/*
+ * Main-thread callback to start playback safely.
+ * Triggered via g_idle_add from the IPC thread.
+ */
+static gboolean idle_start_playback(gpointer data)
 {
+    (void)data;
+
     VTmpeg *mpeg;
 
-    /* If we are not playing, check the queue */
-    if (!md_gst_is_playing()) {
-        if ((mpeg = unix_getvideo()) != NULL) {
-            g_printerr("Starting playback: %s\n", mpeg->filename);
+    /*
+     * Robust Idle Check:
+     * Only start if the pipeline is explicitly in GST_STATE_NULL.
+     */
+    if (md_gst_is_stopped()) {
+        mpeg = unix_getvideo();
+        if (mpeg) {
+            g_printerr("Starting playback (event-driven): %s\n", mpeg->filename);
             md_gst_play(mpeg->filename);
         }
     }
 
-    /* Continue polling */
-    return TRUE; 
+    return FALSE; /* Run once */
+}
+
+/* Public helper called from unix.c */
+void start_playback_request(void)
+{
+    g_idle_add(idle_start_playback, NULL);
 }
 
 int main (int argc, char **argv)
@@ -41,11 +55,9 @@ int main (int argc, char **argv)
     int c;
     int loop_enabled = 0;
     int watermark_enabled = 0;
-    
-    /* Initialize GTK first (it strips GTK-specific options) */
+
     gtk_init(&argc, &argv);
 
-    /* Parse our own options */
     struct option long_options[] = {
         {"loop",      no_argument, 0, 'l'},
         {"watermark", no_argument, 0, 'w'},
@@ -54,15 +66,9 @@ int main (int argc, char **argv)
 
     while ((c = getopt_long(argc, argv, "lw", long_options, NULL)) != -1) {
         switch (c) {
-            case 'l':
-                loop_enabled = 1;
-                break;
-            case 'w':
-                watermark_enabled = 1;
-                break;
-            default:
-                /* Ignore unknown options, they might be for GStreamer */
-                break;
+            case 'l': loop_enabled = 1; break;
+            case 'w': watermark_enabled = 1; break;
+            default: break; /* ignore unknowns */
         }
     }
 
@@ -72,12 +78,12 @@ int main (int argc, char **argv)
     g_signal_connect(G_OBJECT(win), "delete_event", G_CALLBACK(finish), NULL);
     gtk_widget_set_size_request(GTK_WIDGET(win), 720, 480);
     gtk_window_move(GTK_WINDOW(win), 0, 0);
-    
-    /* Show before init to ensure window XID is available if needed */
+
+    /* Show early so XID exists for overlay path */
     gtk_widget_show_all(win);
 
     r = md_gst_init(&argc, &argv, win, loop_enabled, watermark_enabled);
-    if(r < 0) {
+    if (r < 0) {
         g_printerr("md_gst_init() failed, aborting.\n");
         gtk_widget_destroy(GTK_WIDGET(win));
         exit(EXIT_SUCCESS);
@@ -89,45 +95,33 @@ int main (int argc, char **argv)
     signal (SIGHUP,  SIG_IGN);
     signal (SIGPIPE, SIG_IGN);
 
-    show_copyright ();
+    show_copyright();
 
-    /* cria o server de unix domain sockets */
-    if (!unix_server ()) {
-        fprintf (stderr, "VTmpegd: Cannot create the server.\n");
+    if (!unix_server()) {
+        fprintf(stderr, "VTmpegd: Cannot create the server.\n");
         return 0;
     }
 
-    /* Use a lightweight poller for startup only/idle check */
-    g_timeout_add_seconds(1, (GSourceFunc)check_queue_startup, NULL);
-
     gtk_main();
-
     return 1;
 }
 
-/* finaliza o processo */
-void finish (void) 
+void finish (void)
 {
-    thread_lock ();
+    thread_lock();
 
-    /* para não ser feito por todos
-       os processos (main e thread) */
     if (already_finished) {
-        thread_unlock ();
-        exit (EXIT_SUCCESS);
+        thread_unlock();
+        exit(EXIT_SUCCESS);
     }
 
-    /* se tiver algum video passando, da stop 
-       e já limpa a lista */
-    unix_finish ();
-
-    /* remove o socket */
-    unlink (unix_sockname ());
+    unix_finish();
+    unlink(unix_sockname());
 
     g_printerr("Goodbye.\n");
     already_finished = 1;
 
-    thread_unlock ();
+    thread_unlock();
 
     md_gst_finish();
     gtk_main_quit();
@@ -137,7 +131,7 @@ void finish (void)
 
 void sfinish (int sig)
 {
-    fprintf (stderr, "VTmpegd: Received signal %d, exiting.\n", sig);
-    close (0); close (1); close (2);
-    finish ();
+    fprintf(stderr, "VTmpegd: Received signal %d, exiting.\n", sig);
+    close(0); close(1); close(2);
+    finish();
 }
