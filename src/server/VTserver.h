@@ -53,6 +53,7 @@ extern gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enab
 extern gint md_gst_play(char *uri);
 extern gint md_gst_finish(void);
 extern int md_gst_is_playing(void);
+extern void md_gst_set_window_handle(guintptr handle);
 
 /* unix.c */
 extern char    *unix_sockname (void);

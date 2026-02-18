@@ -10,6 +10,19 @@ static GtkWidget  *video_widget;
 static int g_loop_enabled = 0;
 static int g_watermark_enabled = 0;
 static char *g_current_uri = NULL;
+static guintptr g_window_handle = 0;
+
+/* Internal helper to ensure a path has a URI scheme */
+static char *ensure_uri_scheme(const char *uri)
+{
+    if (!uri) return NULL;
+
+    if (strstr(uri, "://")) {
+        return g_strdup(uri);
+    } else {
+        return g_strdup_printf("file://%s", uri);
+    }
+}
 
 int md_gst_is_playing(void)
 {
@@ -18,6 +31,29 @@ int md_gst_is_playing(void)
     
     gst_element_get_state(playbin, &current, &pending, 0);
     return (current == GST_STATE_PLAYING || pending == GST_STATE_PLAYING) ? 1 : 0;
+}
+
+void md_gst_set_window_handle(guintptr handle)
+{
+    g_window_handle = handle;
+    if (playbin && GST_IS_VIDEO_OVERLAY(playbin)) {
+        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(playbin), g_window_handle);
+    }
+}
+
+static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer data)
+{
+    /* Handle window embedding request synchronously. 
+       This is critical for GStreamer 1.0 playbin transitions. */
+    if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ELEMENT &&
+        gst_message_has_name(msg, "prepare-window-handle")) {
+        
+        if (g_window_handle != 0) {
+            gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(GST_MESSAGE_SRC(msg)), g_window_handle);
+        }
+    }
+
+    return GST_BUS_PASS;
 }
 
 static void draw_overlay(GstElement *overlay, cairo_t *cr, guint64 timestamp, guint64 duration, gpointer data)
@@ -52,19 +88,24 @@ static void draw_overlay(GstElement *overlay, cairo_t *cr, guint64 timestamp, gu
 static void on_about_to_finish(GstElement *playbin, gpointer data)
 {
     VTmpeg *mpeg;
+    char *new_uri = NULL;
     
     /* This signal is emitted from a streaming thread. */
     mpeg = unix_getvideo();
     if (mpeg) {
         g_printerr("Gapless transition to: %s\n", mpeg->filename);
-        /* Store new URI as current */
-        if (g_current_uri) g_free(g_current_uri);
-        g_current_uri = g_strdup(mpeg->filename);
-        g_object_set(G_OBJECT(playbin), "uri", g_current_uri, NULL);
+        new_uri = ensure_uri_scheme(mpeg->filename);
     } else if (g_loop_enabled && g_current_uri) {
         /* Loop the current video if queue is empty */
         g_printerr("Queue empty, looping: %s\n", g_current_uri);
+        new_uri = g_strdup(g_current_uri);
+    }
+
+    if (new_uri) {
+        if (g_current_uri) g_free(g_current_uri);
+        g_current_uri = g_strdup(new_uri);
         g_object_set(G_OBJECT(playbin), "uri", g_current_uri, NULL);
+        g_free(new_uri);
     }
 }
 
@@ -113,16 +154,11 @@ gint md_gst_play(char *uri)
     gchar *real_uri;
     g_return_val_if_fail(uri, -1);
 
+    real_uri = ensure_uri_scheme(uri);
+
     /* Update current URI cache */
     if (g_current_uri) g_free(g_current_uri);
-    g_current_uri = g_strdup(uri);
-
-    /* Basic check to see if it's already a URI protocol */
-    if (strstr(uri, "://")) {
-        real_uri = g_strdup(uri);
-    } else {
-        real_uri = g_strdup_printf("file://%s", uri);
-    }
+    g_current_uri = g_strdup(real_uri);
 
     g_object_set(G_OBJECT(playbin), "uri", real_uri, NULL);
     g_free(real_uri);
@@ -184,8 +220,13 @@ gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, in
         }
     }
 
-    /* Set up bus watch */
+    /* Set up bus */
     bus = gst_pipeline_get_bus(GST_PIPELINE(playbin));
+    
+    /* 1. Synchronous handler for window embedding */
+    gst_bus_set_sync_handler(bus, bus_sync_handler, NULL, NULL);
+
+    /* 2. Asynchronous watch for state changes/EOS/errors */
     bus_watch_id = gst_bus_add_watch(bus, bus_call, NULL);
     gst_object_unref(bus);
 
