@@ -35,9 +35,9 @@ static void realize_cb (GtkWidget *widget, gpointer data)
 static gboolean draw_cb (GtkWidget *widget, cairo_t *cr, gpointer data)
 {
     /* If GStreamer is playing, let it handle the surface.
-       Otherwise, draw the "OFF AIR" standby screen. */
+       Return TRUE to prevent GTK from clearing the background. */
     if (md_gst_is_playing())
-        return FALSE;
+        return TRUE;
 
     GtkAllocation alloc;
     gtk_widget_get_allocation(widget, &alloc);
@@ -69,13 +69,17 @@ static gboolean draw_cb (GtkWidget *widget, cairo_t *cr, gpointer data)
                       alloc.height - 40);
     cairo_show_text(cr, status);
 
-    return FALSE;
+    /* Return TRUE to signal we've handled the drawing, preventing default clear */
+    return TRUE;
 }
 
 GtkWidget *gst_player_video_new (GstElement *playbin)
 {
     GtkWidget *area = gtk_drawing_area_new();
     
+    /* Critical: Disable default background painting to allow GStreamer overlay */
+    gtk_widget_set_app_paintable(area, TRUE);
+
     /* Connect to realize signal to capture XID */
     g_signal_connect(area, "realize", G_CALLBACK(realize_cb), playbin);
     
