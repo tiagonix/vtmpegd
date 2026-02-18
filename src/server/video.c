@@ -17,7 +17,6 @@
 static void realize_cb (GtkWidget *widget, gpointer data)
 {
     GdkWindow *window = gtk_widget_get_window(widget);
-    GstElement *playbin = GST_ELEMENT(data);
     guintptr window_handle;
 
     if (!gdk_window_ensure_native(window))
@@ -27,8 +26,9 @@ static void realize_cb (GtkWidget *widget, gpointer data)
        to use wayland-specific surface handles. */
     window_handle = GDK_WINDOW_XID(window);
     
-    /* Pass the window handle to the GStreamer element implementing GstVideoOverlay */
-    gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(playbin), window_handle);
+    /* Pass the window handle to the backend. It will be stored and used
+       in the synchronous bus handler whenever a new sink is created. */
+    md_gst_set_window_handle(window_handle);
 }
 
 /* Standby screen drawing callback for when playback is idle */
@@ -76,7 +76,7 @@ GtkWidget *gst_player_video_new (GstElement *playbin)
 {
     GtkWidget *area = gtk_drawing_area_new();
     
-    /* Connect to realize signal to pass XID to GStreamer */
+    /* Connect to realize signal to capture XID */
     g_signal_connect(area, "realize", G_CALLBACK(realize_cb), playbin);
     
     /* Connect to draw signal to handle idle state (Off-Air screen) */
