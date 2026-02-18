@@ -48,8 +48,9 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
     if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ELEMENT &&
         gst_message_has_name(msg, "prepare-window-handle")) {
         
-        if (g_window_handle != 0) {
-            gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(GST_MESSAGE_SRC(msg)), g_window_handle);
+        GstElement *src = GST_MESSAGE_SRC(msg);
+        if (g_window_handle != 0 && GST_IS_VIDEO_OVERLAY(src)) {
+            gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(src), g_window_handle);
         }
     }
 
@@ -202,8 +203,12 @@ gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, in
     if (g_watermark_enabled) {
         GstElement *video_sink_bin;
         
-        /* Create a bin with cairooverlay and autovideosink */
-        video_sink_bin = gst_parse_bin_from_description("cairooverlay name=overlay ! autovideosink", TRUE, NULL);
+        /* Create a bin with scaling and watermark capabilities.
+           Order: Convert -> Scale (Nearest Neighbor for CPU savings on 4K) -> Cap -> Overlay -> Sink */
+        video_sink_bin = gst_parse_bin_from_description(
+            "videoconvert ! videoscale method=0 ! video/x-raw,width=720,height=480 ! cairooverlay name=overlay ! autovideosink", 
+            TRUE, NULL);
+
         if (video_sink_bin) {
             GstElement *overlay = gst_bin_get_by_name(GST_BIN(video_sink_bin), "overlay");
             if (overlay) {
