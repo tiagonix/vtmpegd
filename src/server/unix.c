@@ -83,7 +83,9 @@ VTmpeg *unix_getvideo (void)
 
 	thread_lock ();
 
-	if (playing_mpeg > unix_list_count ()) playing_mpeg = 0;
+    /* FIX: Use g_list_length for reliable count and wrap BEFORE fetch. 
+       This prevents off-by-one errors where playing_mpeg == length. */
+	if (playing_mpeg >= (int)g_list_length(queue)) playing_mpeg = 0;
 
 	/* se não tiver o primeiro video... */
 	if (q == NULL) {
