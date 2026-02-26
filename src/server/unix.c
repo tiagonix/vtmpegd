@@ -188,7 +188,9 @@ void unix_client (int fd)
             char filename[1024];
 
             memset(filename, 0, sizeof(filename));
-            sscanf(temp + 2, "%[^];];%d\n", filename, &pos);
+            /* SECURITY FIX: Bound read to 1023 chars to prevent stack overflow.
+               Also fixed scan set to correctly match ';'. */
+            sscanf(temp + 2, "%1023[^;];%d\n", filename, &pos);
 
             /* Deterministic start check before mutation */
             was_empty = (queue == NULL);
