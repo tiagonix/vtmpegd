@@ -76,7 +76,7 @@ static int VT_send_command(VTCommand *cmd)
 
     //sleep(1);
     shutdown(fd, 2);
-    close(fd);
+    /* Fix: Remove double-close. fclose(fp) handles the fd. */
     fclose(fp);
 
     return 0;
