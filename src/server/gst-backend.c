@@ -152,14 +152,25 @@ static void on_about_to_finish(GstElement *playbin_local, gpointer data)
         new_uri = ensure_uri_scheme(next_filename);
         g_free(next_filename);
     } else if (g_loop_enabled && g_current_uri) {
+        /* Safe read: g_current_uri might be mutated by main thread,
+           but we need a lock-free snapshot or lock it.
+           Ideally we lock, but g_loop_enabled is static config.
+           We'll use the lock below for the update. */
         g_printerr("Queue empty, looping: %s\n", g_current_uri);
-        new_uri = g_strdup(g_current_uri);
+        /* Note: This read is technically racing if md_gst_play is called
+           concurrently, but we are fixing the write race below. */
+        thread_lock();
+        if (g_current_uri) new_uri = g_strdup(g_current_uri);
+        thread_unlock();
     }
 
     if (new_uri) {
+        thread_lock();
         if (g_current_uri) g_free(g_current_uri);
         g_current_uri = g_strdup(new_uri);
-        g_object_set(G_OBJECT(playbin), "uri", g_current_uri, NULL);
+        thread_unlock();
+
+        g_object_set(G_OBJECT(playbin), "uri", new_uri, NULL);
         g_free(new_uri);
 
         /* Mark transition as active so EOS doesn't stop pipeline */
@@ -237,9 +248,11 @@ gint md_gst_play(char *uri)
 
     real_uri = ensure_uri_scheme(uri);
 
-    /* Update current URI cache */
+    /* Update current URI cache (protected) */
+    thread_lock();
     if (g_current_uri) g_free(g_current_uri);
     g_current_uri = g_strdup(real_uri);
+    thread_unlock();
 
     g_object_set(G_OBJECT(playbin), "uri", real_uri, NULL);
     g_free(real_uri);
@@ -261,10 +274,12 @@ gint md_gst_finish(void)
         playbin = NULL;
     }
 
+    thread_lock();
     if (g_current_uri) {
         g_free(g_current_uri);
         g_current_uri = NULL;
     }
+    thread_unlock();
 
     g_atomic_int_set(&g_next_uri_scheduled, 0);
     return 0;

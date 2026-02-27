@@ -135,7 +135,10 @@ void unix_finish (void)
     shutdown(server_fd, 2);
     close(server_fd);
 
-    g_list_free(g_list_first(queue));
+    /* DEEP CLEAN: Free the VTmpeg structs, then the list nodes. */
+    g_list_free_full(g_list_first(queue), free);
+    queue = NULL;
+
     return;
 }
 
@@ -156,7 +159,12 @@ void *unix_loop (void *arg)
         FD_SET(fd, &fds);
         tv.tv_sec = 1; tv.tv_usec = 0;
 
-        if (select(fd + 1, &fds, NULL, NULL, &tv)) {
+        /*
+         * FIX: Explicitly check for success (ret > 0) to avoid entering accept
+         * on errors (like EINTR from signals) or timeouts.
+         */
+        int ret = select(fd + 1, &fds, NULL, NULL, &tv);
+        if (ret > 0 && FD_ISSET(fd, &fds)) {
             thread_lock();
 
             len = sizeof(s);
