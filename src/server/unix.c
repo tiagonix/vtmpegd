@@ -197,7 +197,7 @@ void unix_client (int fd)
             break;
 
         case COMMAND_INSERT: {
-            int pos;
+            int pos = 0;
             char filename[1024];
 
             memset(filename, 0, sizeof(filename));

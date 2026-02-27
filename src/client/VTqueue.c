@@ -63,7 +63,7 @@ static int VT_send_command(VTCommand *cmd)
         exit(1);
     }
 
-    if(!send_cmd(fd, buffer))
+    if(send_cmd(fd, buffer) <= 0)
         fprintf(stderr, "error: ");
 
     if(!(fp = fdopen(fd, "r"))) {
@@ -90,7 +90,7 @@ static void show_help(const char *progname) {
             "NOTES  : There are a _lot_ of commands to come.\n"
             "OPTIONS:\n"
             "\t--add,      -a URI       Add URI to server's play queue\n"
-            "\t--remove,   -r URI       Remove URI from server's play queue\n"
+            "\t--remove,   -r IDX       Remove IDX from server's play queue\n"
             "\t--position, -p IDX       Queue's index to remove or add the URI into\n"
             "\t--list,     -l           list URIs on the server's queue\n"
             "\t--debug,    -d           run de debug mode\n"
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
                 cmd.cmd = REM;
                 if(optarg == NULL)
                     show_help(argv[0]);
-                snprintf(cmd.uri, sizeof(cmd.uri), "%s", optarg);
+                cmd.idx = atoi(optarg);
                 break;
             case 'p':
                 if(optarg == NULL)
@@ -150,7 +150,7 @@ int main(int argc, char **argv)
     /* Validation: ADD commands only require a URI (default idx is -1).
        REM commands require a valid position index. */
     if((cmd.cmd == ADD && strlen(cmd.uri) < 2) || 
-            (cmd.cmd == REM && (strlen(cmd.uri) < 2 || cmd.idx < 0)))
+            (cmd.cmd == REM && cmd.idx <= 0))
         show_help(argv[0]);
 
     VT_send_command(&cmd);
