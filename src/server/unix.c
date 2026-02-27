@@ -172,10 +172,15 @@ void unix_client (int fd)
 {
     GList *q = NULL;
     char temp[2048];
+    ssize_t bytes_read;
     gboolean was_empty = FALSE;
 
     memset(temp, 0, sizeof(temp));
-    if (read(fd, temp, sizeof(temp)) < 0) return;
+    
+    /* Securely read from socket, ensuring null termination. */
+    bytes_read = read(fd, temp, sizeof(temp) - 1);
+    if (bytes_read <= 0) return;
+    temp[bytes_read] = '\0';
 
     switch (atoi(temp)) {
 
