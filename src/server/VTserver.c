@@ -25,17 +25,16 @@ static gboolean idle_start_playback(gpointer data)
 {
     (void)data;
 
-    VTmpeg *mpeg;
-
     /*
      * Robust Idle Check:
      * Only start if the pipeline is explicitly in GST_STATE_NULL.
      */
     if (md_gst_is_stopped()) {
-        mpeg = unix_getvideo();
-        if (mpeg) {
-            g_printerr("Starting playback (event-driven): %s\n", mpeg->filename);
-            md_gst_play(mpeg->filename);
+        char *filename = unix_getvideo();
+        if (filename) {
+            g_printerr("Starting playback (event-driven): %s\n", filename);
+            md_gst_play(filename);
+            g_free(filename);
         }
     }
 

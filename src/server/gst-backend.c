@@ -139,17 +139,18 @@ static void on_about_to_finish(GstElement *playbin_local, gpointer data)
 {
     (void)playbin_local; (void)data;
 
-    VTmpeg *mpeg;
+    char *next_filename = NULL;
     char *new_uri = NULL;
 
     /*
      * SINGLE AUTHORITY for queue advancement.
      * This runs in the streaming thread. No GTK calls allowed.
      */
-    mpeg = unix_getvideo();
-    if (mpeg) {
-        g_printerr("Gapless transition to: %s\n", mpeg->filename);
-        new_uri = ensure_uri_scheme(mpeg->filename);
+    next_filename = unix_getvideo();
+    if (next_filename) {
+        g_printerr("Gapless transition to: %s\n", next_filename);
+        new_uri = ensure_uri_scheme(next_filename);
+        g_free(next_filename);
     } else if (g_loop_enabled && g_current_uri) {
         g_printerr("Queue empty, looping: %s\n", g_current_uri);
         new_uri = g_strdup(g_current_uri);

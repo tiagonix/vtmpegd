@@ -82,6 +82,23 @@ static int VT_send_command(VTCommand *cmd)
     return 0;
 }
 
+/* 
+ * Moved from nested function in main() to file scope for C99 compliance.
+ */
+static void show_help(const char *progname) {
+    fprintf(stdout, "use: %s OPTIONS\n"
+            "NOTES  : There are a _lot_ of commands to come.\n"
+            "OPTIONS:\n"
+            "\t--add,      -a URI       Add URI to server's play queue\n"
+            "\t--remove,   -r URI       Remove URI from server's play queue\n"
+            "\t--position, -p IDX       Queue's index to remove or add the URI into\n"
+            "\t--list,     -l           list URIs on the server's queue\n"
+            "\t--debug,    -d           run de debug mode\n"
+            "\t--help,     -h           this help\n", progname);
+
+    exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char **argv)
 {
     VTCommand cmd;
@@ -96,38 +113,24 @@ int main(int argc, char **argv)
         { "help",     0, 0, 'h' },
     };
 
-    void show_help() {
-        fprintf(stdout, "use: %s OPTIONS\n"
-                "NOTES  : There are a _lot_ of commands to come.\n"
-                "OPTIONS:\n"
-                "\t--add,      -a URI       Add URI to server's play queue\n"
-                "\t--remove,   -r URI       Remove URI from server's play queue\n"
-                "\t--position, -p IDX       Queue's index to remove or add the URI into\n"
-                "\t--list,     -l           list URIs on the server's queue\n"
-                "\t--debug,    -d           run de debug mode\n"
-                "\t--help,     -h           this help\n", *argv);
-
-        exit(EXIT_SUCCESS);
-    }
-
     VT_command_init(&cmd);
     while((c = getopt_long(argc, argv, opts, optl, &optind)) != -1) {
         switch(c) {
             case 'a':
                 cmd.cmd = ADD;
                 if(optarg == NULL)
-                    show_help();
+                    show_help(argv[0]);
                 snprintf(cmd.uri, sizeof(cmd.uri), "%s", optarg);
                 break;
             case 'r':
                 cmd.cmd = REM;
                 if(optarg == NULL)
-                    show_help();
+                    show_help(argv[0]);
                 snprintf(cmd.uri, sizeof(cmd.uri), "%s", optarg);
                 break;
             case 'p':
                 if(optarg == NULL)
-                    show_help();
+                    show_help(argv[0]);
                 cmd.idx = atol(optarg);
                 break;
             case 'l':
@@ -137,10 +140,10 @@ int main(int argc, char **argv)
                 debug = 1;
                 break;
             case 'h':
-                show_help();
+                show_help(argv[0]);
                 break;
             default:
-                show_help();
+                show_help(argv[0]);
         }
     }
 
@@ -148,7 +151,7 @@ int main(int argc, char **argv)
        REM commands require a valid position index. */
     if((cmd.cmd == ADD && strlen(cmd.uri) < 2) || 
             (cmd.cmd == REM && (strlen(cmd.uri) < 2 || cmd.idx < 0)))
-        show_help();
+        show_help(argv[0]);
 
     VT_send_command(&cmd);
     return EXIT_SUCCESS;
