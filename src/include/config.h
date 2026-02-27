@@ -24,12 +24,12 @@
   especificação do protocolo
 
   o client envia:
-  1. para listar o queue: list;
-  2. para inserir no queue: insert;filename;[pos]
-  3. para remover do queue: remove;pos
+  1. para listar o queue: 1
+  2. para inserir no queue: 2 [filename];[pos]
+  3. para remover do queue: 3 [pos]
 
   o server responde:
-  1. pro comando 'list':
+  1. pro comando 'list' (1):
   
      COMMAND_OK || COMMAND_ERROR
      pos - filename
@@ -41,7 +41,7 @@
      2 - /home/video/test.mpeg
      COMMAND_DELIM
 
-  2. pro comando 'insert' e 'remove':
+  2. pro comando 'insert' (2) e 'remove' (3):
 
      COMMAND_OK || COMMAND_ERROR
      COMMAND_DELIM
