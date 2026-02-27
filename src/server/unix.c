@@ -67,10 +67,11 @@ int unix_server (void)
     return 1;
 }
 
-VTmpeg *unix_getvideo (void)
+char *unix_getvideo (void)
 {
     VTmpeg *mpeg;
     GList *q;
+    char *filename_copy = NULL;
 
     thread_lock();
 
@@ -109,10 +110,17 @@ VTmpeg *unix_getvideo (void)
         return NULL;
     }
 
+    /* 
+     * SAFE COPY: We must duplicate the string while holding the lock.
+     * Returning the 'mpeg' pointer is unsafe because the node could be
+     * freed by the IPC thread immediately after we unlock.
+     */
+    filename_copy = g_strdup(mpeg->filename);
+
     playing_mpeg++;
 
     thread_unlock();
-    return mpeg;
+    return filename_copy;
 }
 
 int unix_get_command (void)
