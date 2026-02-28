@@ -212,12 +212,19 @@ void unix_client (int fd)
 
         case COMMAND_INSERT: {
             int pos = 0;
+            int items_matched;
             char filename[1024];
 
             memset(filename, 0, sizeof(filename));
             /* SECURITY FIX: Bound read to 1023 chars to prevent stack overflow.
                Also fixed scan set to correctly match ';'. */
-            sscanf(temp + 2, "%1023[^;];%d\n", filename, &pos);
+            items_matched = sscanf(temp + 2, "%1023[^;];%d\n", filename, &pos);
+
+            /* Strictly require matched items to avoid undefined behavior or coercion */
+            if (items_matched != 2) {
+                dprintf(fd, "%c\nInvalid IPC payload.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+                break;
+            }
 
             /* Deterministic start check before mutation */
             was_empty = (queue == NULL);

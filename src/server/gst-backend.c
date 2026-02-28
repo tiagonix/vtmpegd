@@ -33,8 +33,12 @@ static char *ensure_uri_scheme(const char *uri)
     if (strstr(uri, "://")) {
         return g_strdup(uri);
     } else {
-        /* NOTE: For best practice, consider g_filename_to_uri() later. */
-        return g_strdup_printf("file://%s", uri);
+        /* 
+         * Use GLib's utility to correctly percent-encode local paths.
+         * This handles spaces and special characters that would otherwise
+         * break the GStreamer URI parser.
+         */
+        return g_filename_to_uri(uri, NULL, NULL);
     }
 }
 

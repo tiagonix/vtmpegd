@@ -9,6 +9,7 @@
 
 #include "VTqueue.h"
 #include <sys/time.h>
+#include <limits.h>
 
 static int debug = 0;
 
@@ -43,7 +44,8 @@ static int VT_build_command_string(VTCommand *cmd, char *buf, int size)
 static int VT_send_command(VTCommand *cmd)
 {
     int r;
-    char buffer[256];
+    /* Expanded buffer to handle full path length + IPC overhead */
+    char buffer[2048];
     FILE *fp;
     int fd;
     char *p;
@@ -137,7 +139,32 @@ int main(int argc, char **argv)
                 cmd.cmd = ADD;
                 if(optarg == NULL)
                     show_help(argv[0]);
-                snprintf(cmd.uri, sizeof(cmd.uri), "%s", optarg);
+
+                /* 
+                 * Robust Path Resolution & Validation:
+                 * 1. Resolve relative paths to absolute to ensure daemon can find file.
+                 * 2. Validate length to prevent silent truncation.
+                 */
+                if (strstr(optarg, "://")) {
+                    /* It's already a URI (e.g. http://), use as is */
+                    if (strlen(optarg) >= sizeof(cmd.uri)) {
+                        fprintf(stderr, "Error: URI too long (max %zu bytes).\n", sizeof(cmd.uri) - 1);
+                        exit(EXIT_FAILURE);
+                    }
+                    snprintf(cmd.uri, sizeof(cmd.uri), "%s", optarg);
+                } else {
+                    /* Local file path - resolve absolute path */
+                    char resolved_path[PATH_MAX];
+                    if (realpath(optarg, resolved_path) == NULL) {
+                        perror("realpath");
+                        exit(EXIT_FAILURE);
+                    }
+                    if (strlen(resolved_path) >= sizeof(cmd.uri)) {
+                        fprintf(stderr, "Error: Resolved path too long (max %zu bytes).\n", sizeof(cmd.uri) - 1);
+                        exit(EXIT_FAILURE);
+                    }
+                    snprintf(cmd.uri, sizeof(cmd.uri), "%s", resolved_path);
+                }
                 break;
             case 'r':
                 cmd.cmd = REM;
