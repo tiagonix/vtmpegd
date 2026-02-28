@@ -167,8 +167,10 @@ void *unix_loop (void *arg)
          */
         int ret = select(fd + 1, &fds, NULL, NULL, &tv);
         if (ret > 0 && FD_ISSET(fd, &fds)) {
-            thread_lock();
-
+            /* 
+             * FIX: Do not hold lock during accept() or unix_client() which calls read().
+             * This prevents DoS where a client connects but doesn't send data.
+             */
             len = sizeof(s);
             memset(&s, 0, sizeof(s));
             if ((cfd = accept(fd, (struct sockaddr *) &s, &len)) < 0)
@@ -178,8 +180,6 @@ void *unix_loop (void *arg)
 
             shutdown(cfd, 2);
             close(cfd);
-
-            thread_unlock();
         }
     }
 
@@ -196,9 +196,13 @@ void unix_client (int fd)
     memset(temp, 0, sizeof(temp));
     
     /* Securely read from socket, ensuring null termination. */
+    /* This blocks, so we MUST NOT hold the mutex here. */
     bytes_read = read(fd, temp, sizeof(temp) - 1);
     if (bytes_read <= 0) return;
     temp[bytes_read] = '\0';
+
+    /* Acquire lock only for shared state mutation/access */
+    thread_lock();
 
     switch (atoi(temp)) {
 
@@ -218,13 +222,11 @@ void unix_client (int fd)
             /* Deterministic start check before mutation */
             was_empty = (queue == NULL);
 
-            q = command_insert(fd, queue, filename, pos, &playing_mpeg, unix_list_count());
-            if (q != NULL) {
-                queue = g_list_first(q);
-
-                if (was_empty) {
-                    start_playback_request();
-                }
+            /* Fix: Unconditionally update queue. command_insert returns old queue on error. */
+            queue = command_insert(fd, queue, filename, pos, &playing_mpeg, unix_list_count());
+            
+            if (was_empty && queue != NULL) {
+                start_playback_request();
             }
             break;
         }
@@ -234,10 +236,11 @@ void unix_client (int fd)
 
             sscanf(temp + 2, "%d\n", &pos);
             q = command_remove(fd, queue, pos, &playing_mpeg);
-            if (q != NULL) {
-                unix_command = COMMAND_REMOVE;
-                queue = g_list_first(q);
-            }
+            
+            /* Fix: Always update queue. command_remove returns NULL if list becomes empty,
+               or original queue if error. Both are valid states for assignment. */
+            unix_command = COMMAND_REMOVE;
+            queue = g_list_first(q);
             break;
         }
 
@@ -273,4 +276,6 @@ void unix_client (int fd)
             dprintf(fd, "%c: Unknown command.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
             break;
     }
+
+    thread_unlock();
 }

@@ -52,8 +52,9 @@ GList *command_insert (int fd, GList *queue, const char *filename,
 
     if (pos > 0 && *playing_mpeg == pos) {
         dprintf(fd, "%c\nPosition busy.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+        /* Return original queue on error */
         free(mpeg);
-        return NULL;
+        return queue;
     }
 
     if (mpeg == NULL) {
@@ -72,12 +73,17 @@ GList *command_insert (int fd, GList *queue, const char *filename,
         q = g_list_insert(q, mpeg, (pos - 1));
     }
 
+    /* 
+     * In GLib, NULL is valid for an empty list, but here we expect
+     * a non-NULL result because we just added an item.
+     * If q is NULL here, allocation failed deeply or logic is broken.
+     */
     if (q == NULL) {
         dprintf(fd, "%c\nCannot %s on the list.\n%c\n",
                 COMMAND_ERROR, !pos ? "append" : "insert", COMMAND_DELIM);
-        /* Fix: don’t leak mpeg on list failure */
         free(mpeg);
-        return NULL;
+        /* Return original queue on failure */
+        return queue;
     }
 
     dprintf(fd, "%c\nFilename %s OK\n%c\n", COMMAND_OK, filename, COMMAND_DELIM);
@@ -91,11 +97,11 @@ GList *command_remove (int fd, GList *queue, int pos, int *playing_mpeg)
 
     if (*playing_mpeg == pos) {
         dprintf(fd, "%c\nPosition busy.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
-        return NULL;
+        return queue;
     } else if (!pos) {
 invalid_position:
         dprintf(fd, "%c\nInvalid position.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
-        return NULL;
+        return queue;
     }
 
     mpeg = g_list_nth_data(q, (pos - 1));
@@ -104,10 +110,14 @@ invalid_position:
         free(mpeg);
     } else goto invalid_position;
 
-    if (q == NULL)
-        dprintf(fd, "%c\nCannot remove position %d\n%c\n", COMMAND_ERROR, pos, COMMAND_DELIM);
-    else
-        dprintf(fd, "%c\nRemove position %d OK\n%c\n", COMMAND_OK, pos, COMMAND_DELIM);
+    /*
+     * FIX: g_list_remove returns NULL if the list becomes empty.
+     * We must differentiate success (NULL or valid ptr) from error.
+     * Since we handle errors above by returning 'queue',
+     * if we reach here, the operation was successful.
+     */
+
+    dprintf(fd, "%c\nRemove position %d OK\n%c\n", COMMAND_OK, pos, COMMAND_DELIM);
 
     if (*playing_mpeg > pos) *playing_mpeg -= 1;
 
