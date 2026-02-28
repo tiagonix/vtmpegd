@@ -40,7 +40,7 @@ int send_cmd(int fd, const char *cmd)
 	ret = select(fd + 1, &fds, NULL, NULL, &tv);
 	if (ret > 0) {
 		memset(buf, 0, sizeof(buf));
-		if (!read(fd, buf, sizeof(buf)))
+		if (read(fd, buf, sizeof(buf)) <= 0)
 	   		return -1;
 
 		if (*buf == COMMAND_ERROR)
