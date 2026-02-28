@@ -151,16 +151,16 @@ static void on_about_to_finish(GstElement *playbin_local, gpointer data)
         g_printerr("Gapless transition to: %s\n", next_filename);
         new_uri = ensure_uri_scheme(next_filename);
         g_free(next_filename);
-    } else if (g_loop_enabled && g_current_uri) {
-        /* Safe read: g_current_uri might be mutated by main thread,
-           but we need a lock-free snapshot or lock it.
-           Ideally we lock, but g_loop_enabled is static config.
-           We'll use the lock below for the update. */
-        g_printerr("Queue empty, looping: %s\n", g_current_uri);
-        /* Note: This read is technically racing if md_gst_play is called
-           concurrently, but we are fixing the write race below. */
+    } else if (g_loop_enabled) {
+        /* FIX: Thread Safety
+           We must acquire the lock BEFORE checking g_current_uri to avoid a race
+           condition with the main thread (md_gst_play) freeing it.
+        */
         thread_lock();
-        if (g_current_uri) new_uri = g_strdup(g_current_uri);
+        if (g_current_uri) {
+            g_printerr("Queue empty, looping: %s\n", g_current_uri);
+            new_uri = g_strdup(g_current_uri);
+        }
         thread_unlock();
     }
 
