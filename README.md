@@ -11,6 +11,12 @@ The system is divided into two decoupled components:
 *   **`VTserver`**: The core engine. It manages a GStreamer 1.0 pipeline, renders video into a GTK 3 window, and hosts a UNIX domain socket server to process commands. It supports gapless transitions between queue items and features a "Station Standby" screen when idle.
 *   **`VTqueue`**: The control client. A POSIX-compliant CLI tool that communicates with the server to manage the playback queue (listing, adding, and removing items).
 
+### Queue Behavior
+
+The server is hardened with a **2048-item limit** to prevent memory exhaustion and ensure stability. The queue management logic depends on the `--loop` flag:
+*   **Default (Station Mode):** The queue operates as a FIFO (First-In, First-Out). Videos are removed from the queue after they are played, allowing for continuous, long-term operation without manual cleanup.
+*   **Loop Mode (`-l`, `--loop`):** The queue is treated as a persistent playlist. Videos remain in the queue after playback, and the server cycles back to the first item upon reaching the end.
+
 ## Requirements
 
 ### Build Dependencies
@@ -77,7 +83,7 @@ Communication occurs over a UNIX domain socket using a simple text-based protoco
 | Command | ID | Arguments | Server Response |
 | :--- | :--- | :--- | :--- |
 | **List** | `1` | None | `S` (OK) + Queue List + `;` |
-| **Insert** | `2` | `filename;pos` | `S` (OK) or `E` (Error) + `;` |
+| **Insert** | `2` | `filename;pos` | `S` (OK) or `E` (Error) + `;`. Can fail if queue is full. |
 | **Remove** | `3` | `pos` | `S` (OK) or `E` (Error) + `;` |
 
 *Note: The server uses the `S` (Success) and `E` (Error) characters followed by the `;` delimiter for all responses.*

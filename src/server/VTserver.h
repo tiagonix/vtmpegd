@@ -57,7 +57,7 @@ extern gboolean md_gst_is_stopped(void);
 
 /* unix.c */
 extern char   *unix_sockname (void);
-extern int     unix_server   (void);
+extern int     unix_server   (int loop_enabled);
 /* Returns a newly allocated string that MUST be freed by the caller. */
 extern char   *unix_getvideo (void);
 extern int     unix_get_command (void);
