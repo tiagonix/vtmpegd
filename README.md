@@ -85,6 +85,12 @@ Communication occurs over a UNIX domain socket using a simple text-based protoco
 | **List** | `1` | None | `S` (OK) + Queue List + `;` |
 | **Insert** | `2` | `filename;pos` | `S` (OK) or `E` (Error) + `;`. Can fail if queue is full. |
 | **Remove** | `3` | `pos` | `S` (OK) or `E` (Error) + `;` |
+| **Play** | `4` | None | `S` (OK) or `E` (Error) + `;` |
+| **Pause** | `5` | None | `S` (OK) or `E` (Error) + `;` |
+| **Stop** | `6` | None | `S` (OK) or `E` (Error) + `;` |
+| **Next** | `7` | None | `S` (OK) or `E` (Error) + `;` |
+| **Prev** | `8` | None | `S` (OK) or `E` (Error) + `;` |
+| **Mute** | `9` | None | `S` (OK) or `E` (Error) + `;` |
 
 *Note: The server uses the `S` (Success) and `E` (Error) characters followed by the `;` delimiter for all responses.*
 
