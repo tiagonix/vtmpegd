@@ -6,9 +6,9 @@
  */
 
 #include "VTserver.h"
+#include <glib-unix.h>
 
 static void finish  (void);
-static void sfinish (int sig);
 static int already_finished = 0;
 
 void show_copyright(void)
@@ -45,6 +45,18 @@ static gboolean idle_start_playback(gpointer data)
 void start_playback_request(void)
 {
     g_idle_add(idle_start_playback, NULL);
+}
+
+/*
+ * GLib Unix Signal Handler
+ * safely handles SIGINT/SIGTERM from the main loop
+ */
+static gboolean sig_handler(gpointer user_data)
+{
+    (void)user_data;
+    g_printerr("VTmpegd: Received termination signal, exiting.\n");
+    finish();
+    return G_SOURCE_REMOVE;
 }
 
 int main (int argc, char **argv)
@@ -88,9 +100,11 @@ int main (int argc, char **argv)
         exit(EXIT_SUCCESS);
     }
 
-    signal (SIGINT,  sfinish);
-    signal (SIGTERM, sfinish);
-    signal (SIGSEGV, sfinish);
+    /* Modern GLib signal handling (Main Loop Safe) */
+    g_unix_signal_add(SIGINT, sig_handler, NULL);
+    g_unix_signal_add(SIGTERM, sig_handler, NULL);
+
+    /* Ignore signals that are not useful or handled elsewhere */
     signal (SIGHUP,  SIG_IGN);
     signal (SIGPIPE, SIG_IGN);
 
@@ -126,11 +140,4 @@ void finish (void)
     gtk_main_quit();
 
     exit(EXIT_SUCCESS);
-}
-
-void sfinish (int sig)
-{
-    fprintf(stderr, "VTmpegd: Received signal %d, exiting.\n", sig);
-    close(0); close(1); close(2);
-    finish();
 }
