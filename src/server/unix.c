@@ -17,12 +17,6 @@ static GList *queue, *temp_queue;
 static void *unix_loop   (void *arg);
 static void  unix_client (int fd);
 
-static int unix_list_count (void)
-{
-    /* Fix legacy off-by-one. */
-    return (queue == NULL) ? 0 : (int)g_list_length(queue);
-}
-
 char *unix_sockname (void)
 {
     int i = 0;
@@ -218,7 +212,6 @@ void *unix_loop (void *arg)
 
 void unix_client (int fd)
 {
-    GList *q = NULL;
     char temp[PATH_MAX + 128];
     ssize_t bytes_read;
     gboolean was_empty = FALSE;
@@ -233,100 +226,23 @@ void unix_client (int fd)
 
     /* Acquire lock only for shared state mutation/access */
     thread_lock();
+    
+    was_empty = (queue == NULL);
 
-    switch (atoi(temp)) {
+    int cmd_effect = 0;
+    char *response = command_process(temp, &queue, &playing_mpeg, &cmd_effect);
 
-        case COMMAND_LIST:
-            command_list(fd, g_list_first(queue), playing_mpeg);
-            break;
+    unix_command = cmd_effect;
 
-        case COMMAND_INSERT: {
-            int pos = 0;
-            int items_matched;
-            char filename[PATH_MAX];
-            char fmt[64];
-
-            memset(filename, 0, sizeof(filename));
-            
-            /* 
-             * DYNAMIC FORMAT: Construct the sscanf format string using the actual
-             * buffer size (PATH_MAX) to prevent overflow while supporting long paths.
-             * This replaces the hardcoded %1023[^;].
-             */
-            snprintf(fmt, sizeof(fmt), "%%%zu[^;];%%d\n", sizeof(filename) - 1);
-            
-            items_matched = sscanf(temp + 2, fmt, filename, &pos);
-
-            /* Strictly require matched items to avoid undefined behavior or coercion */
-            if (items_matched != 2) {
-                dprintf(fd, "%c\nInvalid IPC payload.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
-                break;
-            }
-
-            /* Deterministic start check before mutation */
-            was_empty = (queue == NULL);
-
-            /* Fix: Unconditionally update queue. command_insert returns old queue on error. */
-            queue = command_insert(fd, queue, filename, pos, &playing_mpeg, unix_list_count());
-            
-            if (was_empty && queue != NULL) {
-                start_playback_request();
-            }
-            break;
-        }
-
-        case COMMAND_REMOVE: {
-            int pos = 0;
-
-            sscanf(temp + 2, "%d\n", &pos);
-            q = command_remove(fd, queue, pos, &playing_mpeg);
-            
-            /* Fix: Always update queue. command_remove returns NULL if list becomes empty,
-               or original queue if error. Both are valid states for assignment. */
-            unix_command = COMMAND_REMOVE;
-            queue = g_list_first(q);
-            break;
-        }
-
-        case COMMAND_PLAY:
-            unix_command = COMMAND_PLAY;
-            break;
-
-        case COMMAND_PAUSE:
-            unix_command = COMMAND_PAUSE;
-            break;
-
-        case COMMAND_STOP:
-            unix_command = COMMAND_STOP;
-            break;
-
-        case COMMAND_NEXT:
-            unix_command = COMMAND_NEXT;
-            break;
-
-        case COMMAND_PREV: {
-            int t;
-            /* 
-             * FIX: Off-by-one logic error.
-             * When wrapping backwards from index 0, we must go to (size - 1),
-             * not (size). The previous code pointed out-of-bounds, causing
-             * unix_getvideo to return NULL and stop playback.
-             */
-            if ((t = playing_mpeg - 2) < 0) t = unix_list_count() - 1;
-            
-            playing_mpeg = t;
-            unix_command = COMMAND_NEXT;
-            break;
-        }
-
-        case COMMAND_MUTE:
-            unix_command = COMMAND_MUTE;
-            break;
-
-        default:
-            dprintf(fd, "%c: Unknown command.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
-            break;
+    if (was_empty && queue != NULL) {
+        start_playback_request();
     }
-
+    
     thread_unlock();
+
+    /* Perform socket I/O after releasing the lock */
+    if (response) {
+        dprintf(fd, "%s", response);
+        g_free(response);
+    }
 }
