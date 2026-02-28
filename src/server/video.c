@@ -1,6 +1,5 @@
 /*
  * Modern GStreamer Video Widget (GTK 3 + GstVideoOverlay)
- * Replaces legacy custom widget.
  */
 
 #ifdef HAVE_CONFIG_H

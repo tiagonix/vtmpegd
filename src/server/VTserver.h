@@ -2,7 +2,9 @@
  * $Id: main.h,v 1.14 2001/11/13 04:44:48 alex Exp $
  *
  * (C) 2001 Void Technologies
- * Author: Alex Fiori <fiorix@gmail.com>
+ * Authors:
+ *   Alex Fiori <fiorix@gmail.com>
+ *   Thiago Camargo <thiagocmc@proton.me>
  */
 
 #ifndef _MAIN_H

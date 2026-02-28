@@ -2,8 +2,10 @@
  * $Id: cmd.c,v 1.5 2001/11/10 00:13:31 flv Exp $
  *
  * (C) 2001 Void Technologies
- * Author: Alex Fiori <fiorix@gmail.com>
- * 	   Flávio Mendes <flavio.ayra@gmail.com>
+ * Authors:
+ *   Alex Fiori <fiorix@gmail.com>
+ *   Flávio Mendes <flavio.ayra@gmail.com>
+ *   Thiago Camargo <thiagocmc@proton.me>
  */
 #include "VTqueue.h"
 

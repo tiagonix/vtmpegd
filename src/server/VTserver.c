@@ -2,7 +2,9 @@
  * $Id: main.c,v 1.26 2001/11/13 18:31:33 alex Exp $
  *
  * (C) 2001 Void Technologies
- * Author: Alex Fiori <fiorix@gmail.com>
+ * Authors:
+ *   Alex Fiori <fiorix@gmail.com>
+ *   Thiago Camargo <thiagocmc@proton.me>
  */
 
 #include "VTserver.h"
