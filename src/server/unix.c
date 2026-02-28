@@ -96,9 +96,12 @@ char *unix_getvideo (void)
 
         int len = (int)g_list_length(queue);
         if (playing_mpeg >= len) {
-            playing_mpeg = -1; /* End of playlist, gst-backend handles restart */
-            thread_unlock();
-            return NULL;
+            /* 
+             * Wrap around to the beginning of the playlist.
+             * This ensures the next video returned is the first one,
+             * preventing the backend from repeating the last URI.
+             */
+            playing_mpeg = 0;
         }
 
         mpeg = g_list_nth_data(queue, playing_mpeg);
