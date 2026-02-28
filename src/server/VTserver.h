@@ -78,7 +78,7 @@ extern void start_playback_request(void);
 #define PROGRAM_DESCRIPTION "oO VTmpeg - MPEG video player daemon for Linux Oo"
 #define PROGRAM_AUTHORS     "  Alexandre Fiori - <fiorix@gmail.com>\n" \
                             "  Arnaldo Pereira - <egghunt@gmail.com>\n" \
-                            "  Thiago Martins  - <thiagocmc@proton.me>\n"
+                            "  Thiago Camargo  - <thiagocmc@proton.me>\n"
 extern void show_copyright (void);
 
 #endif /* VTserver.h */
