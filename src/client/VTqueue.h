@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/un.h>
 #include <sys/socket.h>
+#include <limits.h>
 
 #include "config.h"
 
@@ -23,7 +24,7 @@ typedef enum {
 
 typedef struct {
     VTCommandType cmd;
-    char          uri[256];
+    char          uri[PATH_MAX];
     int           idx;
 } VTCommand;
 

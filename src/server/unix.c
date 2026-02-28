@@ -175,6 +175,19 @@ void *unix_loop (void *arg)
             memset(&s, 0, sizeof(s));
             if ((cfd = accept(fd, (struct sockaddr *) &s, &len)) < 0)
                 perror("accept"), exit(1);
+            
+            /*
+             * DEFENSE: Configure receive timeout on the accepted socket.
+             * This prevents the single-threaded loop from blocking indefinitely
+             * if a client connects but sends no data.
+             */
+            struct timeval rtv;
+            rtv.tv_sec = 1;
+            rtv.tv_usec = 0;
+            if (setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&rtv, sizeof(rtv)) < 0) {
+                perror("setsockopt");
+                /* Proceed anyway; robustness is preferred over crashing. */
+            }
 
             unix_client(cfd);
 
@@ -189,7 +202,7 @@ void *unix_loop (void *arg)
 void unix_client (int fd)
 {
     GList *q = NULL;
-    char temp[2048];
+    char temp[PATH_MAX + 128];
     ssize_t bytes_read;
     gboolean was_empty = FALSE;
 
@@ -213,12 +226,19 @@ void unix_client (int fd)
         case COMMAND_INSERT: {
             int pos = 0;
             int items_matched;
-            char filename[1024];
+            char filename[PATH_MAX];
+            char fmt[64];
 
             memset(filename, 0, sizeof(filename));
-            /* SECURITY FIX: Bound read to 1023 chars to prevent stack overflow.
-               Also fixed scan set to correctly match ';'. */
-            items_matched = sscanf(temp + 2, "%1023[^;];%d\n", filename, &pos);
+            
+            /* 
+             * DYNAMIC FORMAT: Construct the sscanf format string using the actual
+             * buffer size (PATH_MAX) to prevent overflow while supporting long paths.
+             * This replaces the hardcoded %1023[^;].
+             */
+            snprintf(fmt, sizeof(fmt), "%%%zu[^;];%%d\n", sizeof(filename) - 1);
+            
+            items_matched = sscanf(temp + 2, fmt, filename, &pos);
 
             /* Strictly require matched items to avoid undefined behavior or coercion */
             if (items_matched != 2) {
@@ -269,7 +289,14 @@ void unix_client (int fd)
 
         case COMMAND_PREV: {
             int t;
-            if ((t = playing_mpeg - 2) < 0) t = unix_list_count();
+            /* 
+             * FIX: Off-by-one logic error.
+             * When wrapping backwards from index 0, we must go to (size - 1),
+             * not (size). The previous code pointed out-of-bounds, causing
+             * unix_getvideo to return NULL and stop playback.
+             */
+            if ((t = playing_mpeg - 2) < 0) t = unix_list_count() - 1;
+            
             playing_mpeg = t;
             unix_command = COMMAND_NEXT;
             break;

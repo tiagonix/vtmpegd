@@ -28,6 +28,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <getopt.h>
+#include <limits.h>
 
 /* GTK/gdk */
 #include <gtk/gtk.h>
@@ -42,7 +43,7 @@
 #include "config.h"
 
 typedef struct {
-    char filename[1024];
+    char filename[PATH_MAX];
     int  played;
 } VTmpeg;
 

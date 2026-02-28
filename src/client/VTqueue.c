@@ -45,7 +45,7 @@ static int VT_send_command(VTCommand *cmd)
 {
     int r;
     /* Expanded buffer to handle full path length + IPC overhead */
-    char buffer[2048];
+    char buffer[PATH_MAX + 128];
     FILE *fp;
     int fd;
     char *p;
