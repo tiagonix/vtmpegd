@@ -112,7 +112,7 @@ int main (int argc, char **argv)
 
     show_copyright();
 
-    if (!unix_server()) {
+    if (!unix_server(loop_enabled)) {
         fprintf(stderr, "VTmpegd: Cannot create the server.\n");
         return 0;
     }

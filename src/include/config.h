@@ -15,6 +15,9 @@
    do servidor */
 #define MAX_RESULT_LINE_LEN 2048
 
+/* Hard limit on queue depth to prevent memory exhaustion DoS */
+#define MAX_QUEUE_LEN 2048
+
 /* definições do widget onde deverá passar o mpeg */
 #define VIDEO_WIDTH	640
 #define VIDEO_HEIGHT	480

@@ -13,6 +13,7 @@ static int   server_fd;
 static int   unix_command = 0;
 static int   playing_mpeg = -1;
 static GList *queue, *temp_queue;
+static int   g_loop_enabled = 0;
 
 static void *unix_loop   (void *arg);
 static void  unix_client (int fd);
@@ -36,11 +37,13 @@ char *unix_sockname (void)
     return filename;
 }
 
-int unix_server (void)
+int unix_server (int loop_enabled)
 {
     int fd;
     pthread_t th;
     struct sockaddr_un s;
+
+    g_loop_enabled = loop_enabled;
 
     s.sun_family = AF_UNIX;
     snprintf(s.sun_path, sizeof(s.sun_path), "%s", unix_sockname());
@@ -77,54 +80,45 @@ int unix_server (void)
 char *unix_getvideo (void)
 {
     VTmpeg *mpeg;
-    GList *q;
     char *filename_copy = NULL;
 
     thread_lock();
 
-    q = g_list_first(queue);
-
-    if (q == NULL) {
+    if (queue == NULL) {
         playing_mpeg = -1;
         thread_unlock();
         return NULL;
     }
 
-    /* CRITICAL: normalize startup state */
-    if (playing_mpeg < 0)
-        playing_mpeg = 0;
+    if (g_loop_enabled) {
+        /* LOOPING MODE: Cycle through the list using an index. */
+        if (playing_mpeg < 0) playing_mpeg = 0;
 
-    /* Wrap BEFORE fetch. */
-    {
-        int len = (int)g_list_length(q);
-        if (len <= 0) {
-            playing_mpeg = -1;
-            thread_unlock();
-            return NULL;
-        }
+        int len = (int)g_list_length(queue);
         if (playing_mpeg >= len) {
-            /* End-of-playlist: do NOT wrap here (looping is handled by gst-backend via --loop). */
-            playing_mpeg = -1;
+            playing_mpeg = -1; /* End of playlist, gst-backend handles restart */
             thread_unlock();
             return NULL;
         }
+
+        mpeg = g_list_nth_data(queue, playing_mpeg);
+        if (mpeg) {
+            filename_copy = g_strdup(mpeg->filename);
+            playing_mpeg++;
+        }
+    } else {
+        /* FIFO MODE: Consume from the head of the list. */
+        GList *head_link = g_list_first(queue);
+        if (head_link) {
+            mpeg = (VTmpeg *)head_link->data;
+            filename_copy = g_strdup(mpeg->filename);
+
+            /* Consume the item: remove from list and free memory */
+            queue = g_list_remove(queue, mpeg);
+            free(mpeg);
+            playing_mpeg = 0; /* Keep index sane, though unused here */
+        }
     }
-
-    mpeg = g_list_nth_data(q, playing_mpeg);
-    if (mpeg == NULL) {
-        playing_mpeg = 0;
-        thread_unlock();
-        return NULL;
-    }
-
-    /* 
-     * SAFE COPY: We must duplicate the string while holding the lock.
-     * Returning the 'mpeg' pointer is unsafe because the node could be
-     * freed by the IPC thread immediately after we unlock.
-     */
-    filename_copy = g_strdup(mpeg->filename);
-
-    playing_mpeg++;
 
     thread_unlock();
     return filename_copy;
