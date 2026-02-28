@@ -64,9 +64,8 @@ extern int     unix_get_command (void);
 extern void    unix_finish   (void);
 
 /* commands.c */
-extern void   command_list   (int fd, GList *queue, int playing_mpeg);
-extern GList *command_insert (int fd, GList *queue, const char *filename, int pos, int *playing_mpeg, int max_pos);
-extern GList *command_remove (int fd, GList *queue, int pos, int *playing_mpeg);
+/* Returns a newly allocated string that MUST be freed by the caller, or NULL. */
+extern char *command_process(const char *payload, GList **queue, int *playing_mpeg, int *cmd_effect);
 
 /* thread.c */
 extern void thread_lock   (void);
