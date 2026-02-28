@@ -8,6 +8,7 @@
  */
 
 #include "VTqueue.h"
+#include <sys/time.h>
 
 static int debug = 0;
 
@@ -63,6 +64,19 @@ static int VT_send_command(VTCommand *cmd)
     if(connect(fd, (struct sockaddr *) &s, sizeof(s)) < 0) {
         perror("connect");
         exit(1);
+    }
+
+    /* 
+     * Configure native socket receive timeout.
+     * This replaces the manual select() logic in cmd.c and prevents
+     * deadlocks with stdio buffering.
+     */
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) < 0) {
+        perror("setsockopt");
+        /* Continue even if timeout setup fails, though behavior may block. */
     }
 
     if(send_cmd(fd, buffer) <= 0)
