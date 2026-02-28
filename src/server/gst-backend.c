@@ -289,11 +289,121 @@ gint md_gst_finish(void)
     return 0;
 }
 
+/*
+ * Helper to set up the modern GTK sink pipeline.
+ * Tries gtkglsink, then gtksink, and builds a bin with overlay support.
+ * Returns TRUE on success, FALSE on failure.
+ */
+static gboolean setup_modern_sink(GtkWidget *win)
+{
+    GstElement *sink = NULL, *sink_bin = NULL, *convert = NULL, *scale = NULL, *overlay = NULL;
+    gboolean success = FALSE;
+
+    if (!(sink = gst_element_factory_make("gtkglsink", "gtkglsink_elt")) &&
+        !(sink = gst_element_factory_make("gtksink", "gtksink_elt"))) {
+        return FALSE; /* No modern sinks available */
+    }
+
+    sink_bin = gst_bin_new("sink_bin");
+    convert  = gst_element_factory_make("videoconvert", NULL);
+    scale    = gst_element_factory_make("videoscale", NULL);
+    overlay  = gst_element_factory_make("cairooverlay", "overlay");
+
+    if (!sink_bin || !convert || !scale || !overlay) {
+        g_printerr("Failed to create bin elements, falling back.\n");
+        goto cleanup;
+    }
+    
+    gst_bin_add_many(GST_BIN(sink_bin), convert, scale, overlay, sink, NULL);
+    if (!gst_element_link_many(convert, scale, overlay, sink, NULL)) {
+        g_printerr("Failed to link sink bin elements, falling back.\n");
+        goto cleanup;
+    }
+
+    GstPad *target_pad = gst_element_get_static_pad(convert, "sink");
+    if (target_pad) {
+        GstPad *ghost_pad = gst_ghost_pad_new("sink", target_pad);
+        gst_object_unref(target_pad);
+        if (ghost_pad && gst_element_add_pad(sink_bin, ghost_pad)) {
+            success = TRUE;
+        } else {
+            g_printerr("Failed to add ghost pad to sink bin, falling back.\n");
+            if (ghost_pad) gst_object_unref(ghost_pad);
+        }
+    } else {
+        g_printerr("Failed to get convert sink pad, falling back.\n");
+    }
+
+    if (!success) goto cleanup;
+
+    g_object_get(sink, "widget", &video_widget, NULL);
+    if (video_widget) {
+        g_using_gtksink = TRUE;
+        gtk_container_add(GTK_CONTAINER(win), video_widget);
+        gtk_widget_show(video_widget);
+        g_object_unref(video_widget); /* Container holds ref now */
+        if (g_watermark_enabled)
+            g_signal_connect(overlay, "draw", G_CALLBACK(draw_overlay), NULL);
+        g_object_set(G_OBJECT(playbin), "video-sink", sink_bin, NULL);
+    } else {
+        g_printerr("Failed to get gtksink widget, falling back.\n");
+        success = FALSE;
+    }
+
+cleanup:
+    if (!success) {
+        if (sink_bin) gst_object_unref(GST_OBJECT(sink_bin));
+    }
+    /* Elements not added to a successful bin need individual unreffing */
+    if (success) {
+        /* sink_bin now owns these, so we drop our initial ref */
+    } else {
+        if (convert) gst_object_unref(GST_OBJECT(convert));
+        if (scale) gst_object_unref(GST_OBJECT(scale));
+        if (overlay) gst_object_unref(GST_OBJECT(overlay));
+        if (sink) gst_object_unref(GST_OBJECT(sink));
+    }
+    return success;
+}
+
+/*
+ * Helper for legacy GstVideoOverlay embedding.
+ * Creates a drawing area and configures a video sink with cairooverlay if needed.
+ */
+static void setup_fallback_sink(GtkWidget *win)
+{
+    g_printerr("Modern sinks not available or failed, using fallback embedding.\n");
+    video_widget = gst_player_video_new(playbin);
+    if (!video_widget) return;
+    
+    gtk_container_add(GTK_CONTAINER(win), video_widget);
+    gtk_widget_show(video_widget);
+
+    if (g_watermark_enabled) {
+        GError *error = NULL;
+        GstElement *video_sink_bin = gst_parse_bin_from_description(
+            "videoconvert ! videoscale method=0 ! cairooverlay name=overlay ! autovideosink",
+            TRUE, &error);
+
+        if (video_sink_bin) {
+            GstElement *ov = gst_bin_get_by_name(GST_BIN(video_sink_bin), "overlay");
+            if (ov) {
+                g_signal_connect(ov, "draw", G_CALLBACK(draw_overlay), NULL);
+                gst_object_unref(GST_OBJECT(ov));
+                g_object_set(G_OBJECT(playbin), "video-sink", video_sink_bin, NULL);
+            } else {
+                gst_object_unref(GST_OBJECT(video_sink_bin));
+            }
+        } else if (error) {
+            g_printerr("Failed to parse fallback sink bin: %s\n", error->message);
+            g_error_free(error);
+        }
+    }
+}
+
+
 gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, int watermark_enabled)
 {
-    GstElement *sink = NULL;
-    gboolean using_modern_sink = FALSE;
-
     /* Store feature flags */
     g_loop_enabled = loop_enabled;
     g_watermark_enabled = watermark_enabled;
@@ -313,114 +423,12 @@ gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, in
     }
 
     /*
-     * Modern Embedding Path A: Try gtkglsink -> gtksink
+     * Attempt to use modern, hardware-accelerated sinks first.
+     * If this path succeeds, it handles widget creation and attachment.
      */
-    if ((sink = gst_element_factory_make("gtkglsink", "gtkglsink_elt"))) {
-        using_modern_sink = TRUE;
-    } else if ((sink = gst_element_factory_make("gtksink", "gtksink_elt"))) {
-        using_modern_sink = TRUE;
-    }
-
-    if (using_modern_sink && sink) {
-        GstElement *sink_bin = NULL;
-        GstElement *convert = NULL, *scale = NULL, *overlay = NULL;
-
-        sink_bin = gst_bin_new("sink_bin");
-        convert  = gst_element_factory_make("videoconvert", NULL);
-        scale    = gst_element_factory_make("videoscale", NULL);
-        overlay  = gst_element_factory_make("cairooverlay", "overlay");
-
-        if (sink_bin && convert && scale && overlay) {
-            gboolean ok_pad = FALSE;
-
-            gst_bin_add_many(GST_BIN(sink_bin), convert, scale, overlay, sink, NULL);
-            if (!gst_element_link_many(convert, scale, overlay, sink, NULL)) {
-                g_printerr("Failed to link sink bin elements, falling back.\n");
-                gst_object_unref(GST_OBJECT(sink_bin));
-                sink_bin = NULL;
-            } else {
-                GstPad *target_pad = gst_element_get_static_pad(convert, "sink");
-                if (target_pad) {
-                    GstPad *ghost_pad = gst_ghost_pad_new("sink", target_pad);
-                    gst_object_unref(target_pad);
-
-                    if (ghost_pad) {
-                        if (gst_element_add_pad(sink_bin, ghost_pad)) {
-                            ok_pad = TRUE;
-                        } else {
-                            g_printerr("Failed to add ghost pad to sink bin, falling back.\n");
-                            gst_object_unref(GST_OBJECT(ghost_pad));
-                        }
-                    } else {
-                        g_printerr("Failed to create ghost pad, falling back.\n");
-                    }
-                } else {
-                    g_printerr("Failed to get convert sink pad, falling back.\n");
-                }
-
-                if (!ok_pad) {
-                    gst_object_unref(GST_OBJECT(sink_bin));
-                    sink_bin = NULL;
-                }
-            }
-
-            if (sink_bin) {
-                g_object_get(sink, "widget", &video_widget, NULL);
-                if (video_widget) {
-                    g_using_gtksink = TRUE;
-
-                    gtk_container_add(GTK_CONTAINER(win), video_widget);
-                    gtk_widget_show(video_widget);
-
-                    /* Drop our ref; container holds one now */
-                    g_object_unref(video_widget);
-
-                    if (g_watermark_enabled)
-                        g_signal_connect(overlay, "draw", G_CALLBACK(draw_overlay), NULL);
-
-                    g_object_set(G_OBJECT(playbin), "video-sink", sink_bin, NULL);
-                } else {
-                    g_printerr("Failed to get gtksink widget, falling back.\n");
-                    gst_object_unref(GST_OBJECT(sink_bin));
-                    /* keep g_using_gtksink FALSE => fallback path B */
-                }
-            }
-        } else {
-            g_printerr("Failed to create bin elements, falling back.\n");
-            if (sink_bin) gst_object_unref(GST_OBJECT(sink_bin));
-            if (convert) gst_object_unref(GST_OBJECT(convert));
-            if (scale) gst_object_unref(GST_OBJECT(scale));
-            if (overlay) gst_object_unref(GST_OBJECT(overlay));
-            /* sink was not added to bin, so it is floating/owned by us */
-            if (sink) gst_object_unref(GST_OBJECT(sink));
-        }
-    }
-
-    /*
-     * Fallback Embedding Path B: Legacy GstVideoOverlay (via video.c)
-     */
-    if (!g_using_gtksink) {
-        g_printerr("Modern sinks not available or failed, using fallback embedding.\n");
-        video_widget = gst_player_video_new(playbin);
-        if (video_widget) {
-            gtk_container_add(GTK_CONTAINER(win), video_widget);
-            gtk_widget_show(video_widget);
-
-            if (g_watermark_enabled) {
-                GstElement *video_sink_bin = gst_parse_bin_from_description(
-                    "videoconvert ! videoscale method=0 ! cairooverlay name=overlay ! autovideosink",
-                    TRUE, NULL);
-
-                if (video_sink_bin) {
-                    GstElement *ov = gst_bin_get_by_name(GST_BIN(video_sink_bin), "overlay");
-                    if (ov) {
-                        g_signal_connect(ov, "draw", G_CALLBACK(draw_overlay), NULL);
-                        gst_object_unref(GST_OBJECT(ov));
-                        g_object_set(G_OBJECT(playbin), "video-sink", video_sink_bin, NULL);
-                    }
-                }
-            }
-        }
+    if (!setup_modern_sink(win)) {
+        /* Fall back to legacy GstVideoOverlay embedding. */
+        setup_fallback_sink(win);
     }
 
     bus = gst_pipeline_get_bus(GST_PIPELINE(playbin));
