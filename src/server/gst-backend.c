@@ -298,6 +298,7 @@ static gboolean setup_modern_sink(GtkWidget *win)
 {
     GstElement *sink = NULL, *sink_bin = NULL, *convert = NULL, *scale = NULL, *overlay = NULL;
     gboolean success = FALSE;
+    gboolean elements_added = FALSE;
 
     if (!(sink = gst_element_factory_make("gtkglsink", "gtkglsink_elt")) &&
         !(sink = gst_element_factory_make("gtksink", "gtksink_elt"))) {
@@ -315,6 +316,8 @@ static gboolean setup_modern_sink(GtkWidget *win)
     }
     
     gst_bin_add_many(GST_BIN(sink_bin), convert, scale, overlay, sink, NULL);
+    elements_added = TRUE;
+    
     if (!gst_element_link_many(convert, scale, overlay, sink, NULL)) {
         g_printerr("Failed to link sink bin elements, falling back.\n");
         goto cleanup;
@@ -358,10 +361,12 @@ cleanup:
     if (success) {
         /* sink_bin now owns these, so we drop our initial ref */
     } else {
-        if (convert) gst_object_unref(GST_OBJECT(convert));
-        if (scale) gst_object_unref(GST_OBJECT(scale));
-        if (overlay) gst_object_unref(GST_OBJECT(overlay));
-        if (sink) gst_object_unref(GST_OBJECT(sink));
+        if (!elements_added) {
+            if (convert) gst_object_unref(GST_OBJECT(convert));
+            if (scale) gst_object_unref(GST_OBJECT(scale));
+            if (overlay) gst_object_unref(GST_OBJECT(overlay));
+            if (sink) gst_object_unref(GST_OBJECT(sink));
+        }
     }
     return success;
 }

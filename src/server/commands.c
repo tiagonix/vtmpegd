@@ -55,8 +55,8 @@ static char *command_insert (GList **p_queue, const char *filename,
         return g_strdup_printf("%c\nQueue is full (max %d items).\n%c\n", COMMAND_ERROR, MAX_QUEUE_LEN, COMMAND_DELIM);
     }
 
-    if (!g_path_is_absolute(filename)) {
-        return g_strdup_printf("%c\nError: Path must be absolute.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+    if (!g_path_is_absolute(filename) && strstr(filename, "://") == NULL) {
+        return g_strdup_printf("%c\nError: Path must be absolute or a valid URI.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
     }
 
     if (pos <= 0 || pos > max_pos) pos = 0;
