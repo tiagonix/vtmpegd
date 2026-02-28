@@ -51,9 +51,20 @@ int unix_server (void)
     s.sun_family = AF_UNIX;
     snprintf(s.sun_path, sizeof(s.sun_path), "%s", unix_sockname());
 
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) return 0;
-    if (bind(fd, (struct sockaddr *) &s, sizeof(s)) < 0) return 0;
-    if (listen(fd, 1) < 0) return 0;
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+        perror("socket");
+        return 0;
+    }
+    if (bind(fd, (struct sockaddr *) &s, sizeof(s)) < 0) {
+        perror("bind");
+        close(fd);
+        return 0;
+    }
+    if (listen(fd, 1) < 0) {
+        perror("listen");
+        close(fd);
+        return 0;
+    }
 
     chmod(unix_sockname(), 0666);
 
@@ -173,8 +184,14 @@ void *unix_loop (void *arg)
              */
             len = sizeof(s);
             memset(&s, 0, sizeof(s));
-            if ((cfd = accept(fd, (struct sockaddr *) &s, &len)) < 0)
-                perror("accept"), exit(1);
+            if ((cfd = accept(fd, (struct sockaddr *) &s, &len)) < 0) {
+                /*
+                 * RESILIENCE: Log the error but do NOT exit. 
+                 * Transient network errors (EINTR, ECONNABORTED) must not kill the daemon.
+                 */
+                perror("accept");
+                continue;
+            }
             
             /*
              * DEFENSE: Configure receive timeout on the accepted socket.
