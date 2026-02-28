@@ -384,6 +384,11 @@ gint md_gst_init(gint *argc, gchar ***argv, GtkWidget *win, int loop_enabled, in
         } else {
             g_printerr("Failed to create bin elements, falling back.\n");
             if (sink_bin) gst_object_unref(GST_OBJECT(sink_bin));
+            if (convert) gst_object_unref(GST_OBJECT(convert));
+            if (scale) gst_object_unref(GST_OBJECT(scale));
+            if (overlay) gst_object_unref(GST_OBJECT(overlay));
+            /* sink was not added to bin, so it is floating/owned by us */
+            if (sink) gst_object_unref(GST_OBJECT(sink));
         }
     }
 

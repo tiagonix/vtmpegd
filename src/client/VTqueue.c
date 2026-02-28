@@ -113,6 +113,7 @@ int main(int argc, char **argv)
         { "list",     0, 0, 'l' },
         { "debug",    0, 0, 'd' },
         { "help",     0, 0, 'h' },
+        { 0, 0, 0, 0 }
     };
 
     VT_command_init(&cmd);
