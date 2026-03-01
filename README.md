@@ -84,18 +84,18 @@ Use the `VTqueue` tool to control the server.
 
 Communication occurs over a UNIX domain socket using a simple text-based protocol.
 
-| Command | ID | Arguments | Server Response |
-| :--- | :--- | :--- | :--- |
-| **List** | `1` | None | `S` (OK) + Queue List + `;` |
-| **Insert** | `2` | `filename;pos` | `S` (OK) or `E` (Error) + `;`. Can fail if queue is full. |
-| **Remove** | `3` | `pos` | `S` (OK) or `E` (Error) + `;` |
-| **Play** | `4` | None | `S` (OK) or `E` (Error) + `;` |
-| **Pause** | `5` | None | `S` (OK) or `E` (Error) + `;` |
-| **Stop** | `6` | None | `S` (OK) or `E` (Error) + `;` |
-| **Next** | `7` | None | `S` (OK) or `E` (Error) + `;` |
-| **Prev** | `8` | None | `S` (OK) or `E` (Error) + `;` |
-| **Mute** | `9` | None | `S` (OK) or `E` (Error) + `;` |
-| **Status** | `10` | None | `S` (OK) + Status/Progress String + `;` |
+| Command | ID | Arguments | Server Response | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **List** | `1` | None | `S` + List + `;` | Lists the current video queue. |
+| **Insert** | `2` | `file;pos` | `S` or `E` + `;` | Inserts a video (pos 0 for end). |
+| **Remove** | `3` | `pos` | `S` or `E` + `;` | Removes the video at the given position. |
+| **Play** | `4` | None | `S` or `E` + `;` | Resumes playback. |
+| **Pause** | `5` | None | `S` or `E` + `;` | Pauses playback. |
+| **Stop** | `6` | None | `S` or `E` + `;` | Stops playback and shows standby screen. |
+| **Next** | `7` | None | `S` or `E` + `;` | Skips to the next video in the queue. |
+| **Prev** | `8` | None | `S` or `E` + `;` | Returns to the previous video in the queue. |
+| **Mute** | `9` | None | `S` or `E` + `;` | Toggles audio output on/off. |
+| **Status** | `10` | None | `S` + Info + `;` | Gets playback status and progress. |
 
 *Note: The server uses the `S` (Success) and `E` (Error) characters followed by the `;` delimiter for all responses.*
 
