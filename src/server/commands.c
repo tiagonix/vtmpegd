@@ -9,14 +9,27 @@
 
 #include "VTserver.h"
 
-static char *command_list (GList *queue, int playing_mpeg)
+/* State moved from unix.c to enforce Logic Layering (Invariant 3.4) */
+static GList *queue = NULL;
+static int playing_mpeg = -1;
+static int g_loop_enabled = 0;
+
+void commands_init(int loop_enabled)
+{
+    g_loop_enabled = loop_enabled;
+    queue = NULL;
+    playing_mpeg = -1;
+}
+
+static char *command_list (void)
 {
     int i = 0;
     VTmpeg *mpeg;
     char temp[128];
+    GList *iter = g_list_first(queue);
     GString *response = g_string_new(NULL);
 
-    if (queue == NULL) {
+    if (iter == NULL) {
         g_string_printf(response, "%c\nEmpty list.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
         return g_string_free(response, FALSE);
     }
@@ -26,8 +39,8 @@ static char *command_list (GList *queue, int playing_mpeg)
     g_string_append_printf(response, "%c\n", COMMAND_OK);
     g_string_append_printf(response, "VTmpeg queue list\n");
 
-    while (queue != NULL) {
-        mpeg = (VTmpeg *) queue->data;
+    while (iter != NULL) {
+        mpeg = (VTmpeg *) iter->data;
         if (mpeg != NULL) {
             snprintf(temp, sizeof(temp), "- playing");
 
@@ -36,7 +49,7 @@ static char *command_list (GList *queue, int playing_mpeg)
                     (playing_mpeg - 1)==i ? temp : " ");
         }
 
-        queue = g_list_next(queue);
+        iter = g_list_next(iter);
         i++;
     }
 
@@ -44,10 +57,8 @@ static char *command_list (GList *queue, int playing_mpeg)
     return g_string_free(response, FALSE);
 }
 
-static char *command_insert (GList **p_queue, const char *filename,
-                             int pos, int *playing_mpeg)
+static char *command_insert (const char *filename, int pos)
 {
-    GList *queue = *p_queue;
     VTmpeg *mpeg;
     int max_pos = g_list_length(queue) + 1;
 
@@ -61,7 +72,7 @@ static char *command_insert (GList **p_queue, const char *filename,
 
     if (pos <= 0 || pos > max_pos) pos = 0;
 
-    if (pos > 0 && *playing_mpeg == pos) {
+    if (pos > 0 && playing_mpeg == pos) {
         return g_strdup_printf("%c\nPosition busy.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
     }
     
@@ -76,13 +87,13 @@ static char *command_insert (GList **p_queue, const char *filename,
     snprintf(mpeg->filename, sizeof(mpeg->filename), "%s", filename);
 
     if (!pos)
-        *p_queue = g_list_append(queue, mpeg);
+        queue = g_list_append(queue, mpeg);
     else {
-        if (*playing_mpeg >= pos) *playing_mpeg += 1;
-        *p_queue = g_list_insert(queue, mpeg, (pos - 1));
+        if (playing_mpeg >= pos) playing_mpeg += 1;
+        queue = g_list_insert(queue, mpeg, (pos - 1));
     }
 
-    if (*p_queue == NULL) {
+    if (queue == NULL) {
         free(mpeg);
         return g_strdup_printf("%c\nCannot %s on the list.\n%c\n",
                 COMMAND_ERROR, !pos ? "append" : "insert", COMMAND_DELIM);
@@ -91,12 +102,11 @@ static char *command_insert (GList **p_queue, const char *filename,
     return g_strdup_printf("%c\nFilename %s OK\n%c\n", COMMAND_OK, filename, COMMAND_DELIM);
 }
 
-static char *command_remove (GList **p_queue, int pos, int *playing_mpeg)
+static char *command_remove (int pos)
 {
     VTmpeg *mpeg;
-    GList *queue = *p_queue;
 
-    if (*playing_mpeg == pos) {
+    if (playing_mpeg == pos) {
         return g_strdup_printf("%c\nPosition busy.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
     } else if (pos <= 0 || (guint)pos > g_list_length(queue)) {
         return g_strdup_printf("%c\nInvalid position.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
@@ -104,27 +114,77 @@ static char *command_remove (GList **p_queue, int pos, int *playing_mpeg)
 
     mpeg = g_list_nth_data(queue, (pos - 1));
     if (mpeg) {
-        *p_queue = g_list_remove(queue, mpeg);
+        queue = g_list_remove(queue, mpeg);
         free(mpeg);
     } else {
-        /* Should not happen due to length check above, but defensive. */
         return g_strdup_printf("%c\nInvalid position.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
     }
 
-    if (*playing_mpeg > pos) *playing_mpeg -= 1;
+    if (playing_mpeg > pos) playing_mpeg -= 1;
 
     return g_strdup_printf("%c\nRemove position %d OK\n%c\n", COMMAND_OK, pos, COMMAND_DELIM);
 }
 
+char *command_get_next_video(void)
+{
+    VTmpeg *mpeg;
+    char *filename_copy = NULL;
 
-char *command_process(const char *payload, GList **queue, int *playing_mpeg, int *cmd_effect)
+    thread_lock();
+
+    if (queue == NULL) {
+        playing_mpeg = -1;
+        thread_unlock();
+        return NULL;
+    }
+
+    if (g_loop_enabled) {
+        /* LOOPING MODE: Cycle through the list using an index. */
+        if (playing_mpeg < 0) playing_mpeg = 0;
+
+        int len = (int)g_list_length(queue);
+        if (playing_mpeg >= len) {
+            /* Wrap around */
+            playing_mpeg = 0;
+        }
+
+        mpeg = g_list_nth_data(queue, playing_mpeg);
+        if (mpeg) {
+            filename_copy = g_strdup(mpeg->filename);
+            playing_mpeg++;
+        }
+    } else {
+        /* FIFO MODE: Consume from the head of the list. */
+        GList *head_link = g_list_first(queue);
+        if (head_link) {
+            mpeg = (VTmpeg *)head_link->data;
+            filename_copy = g_strdup(mpeg->filename);
+
+            /* Consume the item: remove from list and free memory */
+            queue = g_list_remove(queue, mpeg);
+            free(mpeg);
+            playing_mpeg = 0;
+        }
+    }
+
+    thread_unlock();
+    return filename_copy;
+}
+
+char *command_process(const char *payload)
 {
     int command_id = atoi(payload);
-    *cmd_effect = 0;
+    char *response = NULL;
+    gboolean was_empty = FALSE;
+
+    /* Locking must be handled here to protect queue mutations */
+    thread_lock();
+    was_empty = (queue == NULL);
 
     switch (command_id) {
         case COMMAND_LIST:
-            return command_list(g_list_first(*queue), *playing_mpeg);
+            response = command_list();
+            break;
 
         case COMMAND_INSERT: {
             int pos = 0;
@@ -137,37 +197,57 @@ char *command_process(const char *payload, GList **queue, int *playing_mpeg, int
             items_matched = sscanf(payload + 2, fmt, filename, &pos);
 
             if (items_matched != 2) {
-                return g_strdup_printf("%c\nInvalid IPC payload for INSERT.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+                response = g_strdup_printf("%c\nInvalid IPC payload for INSERT.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+            } else {
+                response = command_insert(filename, pos);
             }
-            return command_insert(queue, filename, pos, playing_mpeg);
+            break;
         }
 
         case COMMAND_REMOVE: {
             int pos = 0;
             sscanf(payload + 2, "%d\n", &pos);
-            *cmd_effect = COMMAND_REMOVE;
-            return command_remove(queue, pos, playing_mpeg);
+            response = command_remove(pos);
+            break;
         }
 
         case COMMAND_PLAY:
-        case COMMAND_PAUSE:
-        case COMMAND_STOP:
         case COMMAND_NEXT:
-        case COMMAND_MUTE:
-            *cmd_effect = command_id;
+            /* Start or Resume playback */
+            resume_playback_request();
+            /* If it was empty, start_playback_request below will handle it too. */
+            break;
+
+        case COMMAND_PAUSE:
+            pause_playback_request();
+            break;
+
+        case COMMAND_STOP:
+            stop_playback_request();
             break;
 
         case COMMAND_PREV: {
             int t;
-            if ((t = *playing_mpeg - 2) < 0) t = g_list_length(*queue) - 1;
-            *playing_mpeg = t;
-            *cmd_effect = COMMAND_NEXT; /* Signal to backend to start playing */
+            if ((t = playing_mpeg - 2) < 0) t = g_list_length(queue) - 1;
+            playing_mpeg = t;
+            resume_playback_request(); 
             break;
         }
 
+        case COMMAND_MUTE:
+            /* Not implemented in backend yet */
+            break;
+
         default:
-            return g_strdup_printf("%c: Unknown command.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+            response = g_strdup_printf("%c: Unknown command.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+            break;
     }
+
+    if (was_empty && queue != NULL) {
+        start_playback_request();
+    }
+
+    thread_unlock();
     
-    return NULL; /* No string response for simple state commands */
+    return response;
 }

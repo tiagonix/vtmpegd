@@ -19,7 +19,10 @@
 typedef enum {
     ADD = 0,
     REM,
-    LIST
+    LIST,
+    PAUSE_CMD,
+    STOP_CMD,
+    RESUME_CMD
 } VTCommandType;
 
 typedef struct {
