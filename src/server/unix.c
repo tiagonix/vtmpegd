@@ -33,7 +33,7 @@ char *unix_sockname (void)
     return filename;
 }
 
-int unix_server (int loop_enabled)
+int unix_server (void)
 {
     int fd;
     pthread_t th;

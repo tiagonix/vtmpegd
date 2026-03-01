@@ -63,7 +63,7 @@ extern char *md_gst_get_current_uri(void);
 
 /* unix.c */
 extern char   *unix_sockname (void);
-extern int     unix_server   (int loop_enabled);
+extern int     unix_server   (void);
 extern void    unix_finish   (void);
 
 /* commands.c */

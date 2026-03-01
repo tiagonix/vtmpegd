@@ -151,7 +151,7 @@ int main (int argc, char **argv)
     /* Initialize Command Layer state */
     commands_init(loop_enabled);
 
-    if (!unix_server(loop_enabled)) {
+    if (!unix_server()) {
         fprintf(stderr, "VTmpegd: Cannot create the server.\n");
         return 0;
     }
