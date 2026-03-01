@@ -21,6 +21,18 @@ void commands_init(int loop_enabled)
     playing_mpeg = -1;
 }
 
+void commands_cleanup(void)
+{
+    if (queue) {
+        /*
+         * Correctly deallocates the list and its data.
+         * The `free` function is passed as it matches the `malloc` in command_insert.
+         */
+        g_list_free_full(queue, free);
+        queue = NULL;
+    }
+}
+
 static char *command_status(void)
 {
     char *uri = md_gst_get_current_uri();

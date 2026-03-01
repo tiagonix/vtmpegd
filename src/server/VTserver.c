@@ -171,6 +171,7 @@ void finish (void)
 
     unix_finish();
     unlink(unix_sockname());
+    commands_cleanup();
 
     g_printerr("Goodbye.\n");
     already_finished = 1;
