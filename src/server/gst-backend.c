@@ -47,11 +47,6 @@ int md_gst_is_playing(void)
     GstState current, pending;
     if (!playbin) return 0;
 
-    /* IMPORTANT:
-     * With timeout=0, gst_element_get_state() can return ASYNC even when current
-     * is already READY/NULL. For startup gating we only care about current state,
-     * not the return code.
-     */
     gst_element_get_state(playbin, &current, &pending, 0);
     return (current == GST_STATE_PLAYING || pending == GST_STATE_PLAYING) ? 1 : 0;
 }
@@ -62,6 +57,11 @@ gboolean md_gst_is_stopped(void)
 
     if (!playbin) return TRUE;
 
+    /* IMPORTANT:
+     * With timeout=0, gst_element_get_state() can return ASYNC even when current
+     * is already READY/NULL. For startup gating we only care about current state,
+     * not the return code.
+     */
     gst_element_get_state(playbin, &current, &pending, 0);
 
     /* Consider READY as "stopped enough" for safe start. */
