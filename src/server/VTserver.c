@@ -32,7 +32,7 @@ static gboolean idle_start_playback(gpointer data)
      * Only start if the pipeline is explicitly in GST_STATE_NULL.
      */
     if (md_gst_is_stopped()) {
-        char *filename = unix_getvideo();
+        char *filename = command_get_next_video();
         if (filename) {
             g_printerr("Starting playback (event-driven): %s\n", filename);
             md_gst_play(filename);
@@ -43,10 +43,46 @@ static gboolean idle_start_playback(gpointer data)
     return FALSE; /* Run once */
 }
 
-/* Public helper called from unix.c */
+static gboolean idle_pause_playback(gpointer data)
+{
+    (void)data;
+    md_gst_pause();
+    return FALSE;
+}
+
+static gboolean idle_resume_playback(gpointer data)
+{
+    (void)data;
+    md_gst_resume();
+    return FALSE;
+}
+
+static gboolean idle_stop_playback(gpointer data)
+{
+    (void)data;
+    md_gst_stop();
+    return FALSE;
+}
+
+/* Public helper called from commands.c */
 void start_playback_request(void)
 {
     g_idle_add(idle_start_playback, NULL);
+}
+
+void pause_playback_request(void)
+{
+    g_idle_add(idle_pause_playback, NULL);
+}
+
+void resume_playback_request(void)
+{
+    g_idle_add(idle_resume_playback, NULL);
+}
+
+void stop_playback_request(void)
+{
+    g_idle_add(idle_stop_playback, NULL);
 }
 
 /*
@@ -111,6 +147,9 @@ int main (int argc, char **argv)
     signal (SIGPIPE, SIG_IGN);
 
     show_copyright();
+
+    /* Initialize Command Layer state */
+    commands_init(loop_enabled);
 
     if (!unix_server(loop_enabled)) {
         fprintf(stderr, "VTmpegd: Cannot create the server.\n");

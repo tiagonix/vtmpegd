@@ -36,6 +36,15 @@ static int VT_build_command_string(VTCommand *cmd, char *buf, int size)
         case LIST:
             snprintf(buf, size, "1");
             break;
+        case PAUSE_CMD:
+            snprintf(buf, size, "%d", COMMAND_PAUSE);
+            break;
+        case STOP_CMD:
+            snprintf(buf, size, "%d", COMMAND_STOP);
+            break;
+        case RESUME_CMD:
+            snprintf(buf, size, "%d", COMMAND_PLAY); /* Re-use Play to Resume */
+            break;
     }
 
     return 0;
@@ -111,6 +120,9 @@ static void show_help(const char *progname) {
             "\t--remove,   -r IDX       Remove IDX from server's play queue\n"
             "\t--position, -p IDX       Queue's index to remove or add the URI into\n"
             "\t--list,     -l           list URIs on the server's queue\n"
+            "\t--pause,    -P           Pause playback\n"
+            "\t--resume,   -R           Resume playback\n"
+            "\t--stop,     -S           Stop playback\n"
             "\t--debug,    -d           run de debug mode\n"
             "\t--help,     -h           this help\n", progname);
 
@@ -121,12 +133,15 @@ int main(int argc, char **argv)
 {
     VTCommand cmd;
     int c, optind = 0;
-    const char *opts = "a:r:p:ldh";
+    const char *opts = "a:r:p:lPRSdh";
     const struct option optl[] = {
         { "add",      1, 0, 'a' },
         { "remove",   1, 0, 'r' },
         { "position", 1, 0, 'p' },
         { "list",     0, 0, 'l' },
+        { "pause",    0, 0, 'P' },
+        { "resume",   0, 0, 'R' },
+        { "stop",     0, 0, 'S' },
         { "debug",    0, 0, 'd' },
         { "help",     0, 0, 'h' },
         { 0, 0, 0, 0 }
@@ -179,6 +194,15 @@ int main(int argc, char **argv)
                 break;
             case 'l':
                 cmd.cmd = LIST;
+                break;
+            case 'P':
+                cmd.cmd = PAUSE_CMD;
+                break;
+            case 'S':
+                cmd.cmd = STOP_CMD;
+                break;
+            case 'R':
+                cmd.cmd = RESUME_CMD;
                 break;
             case 'd':
                 debug = 1;

@@ -10,10 +10,6 @@
 #include "VTserver.h"
 
 static int   server_fd;
-static int   unix_command = 0;
-static int   playing_mpeg = -1;
-static GList *queue, *temp_queue;
-static int   g_loop_enabled = 0;
 
 static void *unix_loop   (void *arg);
 static void  unix_client (int fd);
@@ -43,8 +39,6 @@ int unix_server (int loop_enabled)
     pthread_t th;
     struct sockaddr_un s;
 
-    g_loop_enabled = loop_enabled;
-
     s.sun_family = AF_UNIX;
     snprintf(s.sun_path, sizeof(s.sun_path), "%s", unix_sockname());
 
@@ -65,8 +59,6 @@ int unix_server (int loop_enabled)
 
     chmod(unix_sockname(), 0666);
 
-    temp_queue = queue = NULL;
-
     server_fd = fd;
     pthread_create(&th, NULL, unix_loop, NULL);
 
@@ -77,72 +69,10 @@ int unix_server (int loop_enabled)
     return 1;
 }
 
-char *unix_getvideo (void)
-{
-    VTmpeg *mpeg;
-    char *filename_copy = NULL;
-
-    thread_lock();
-
-    if (queue == NULL) {
-        playing_mpeg = -1;
-        thread_unlock();
-        return NULL;
-    }
-
-    if (g_loop_enabled) {
-        /* LOOPING MODE: Cycle through the list using an index. */
-        if (playing_mpeg < 0) playing_mpeg = 0;
-
-        int len = (int)g_list_length(queue);
-        if (playing_mpeg >= len) {
-            /* 
-             * Wrap around to the beginning of the playlist.
-             * This ensures the next video returned is the first one,
-             * preventing the backend from repeating the last URI.
-             */
-            playing_mpeg = 0;
-        }
-
-        mpeg = g_list_nth_data(queue, playing_mpeg);
-        if (mpeg) {
-            filename_copy = g_strdup(mpeg->filename);
-            playing_mpeg++;
-        }
-    } else {
-        /* FIFO MODE: Consume from the head of the list. */
-        GList *head_link = g_list_first(queue);
-        if (head_link) {
-            mpeg = (VTmpeg *)head_link->data;
-            filename_copy = g_strdup(mpeg->filename);
-
-            /* Consume the item: remove from list and free memory */
-            queue = g_list_remove(queue, mpeg);
-            free(mpeg);
-            playing_mpeg = 0; /* Keep index sane, though unused here */
-        }
-    }
-
-    thread_unlock();
-    return filename_copy;
-}
-
-int unix_get_command (void)
-{
-    int command = unix_command;
-    unix_command = 0;
-    return command;
-}
-
 void unix_finish (void)
 {
     shutdown(server_fd, 2);
     close(server_fd);
-
-    /* DEEP CLEAN: Free the VTmpeg structs, then the list nodes. */
-    g_list_free_full(g_list_first(queue), free);
-    queue = NULL;
-
     return;
 }
 
@@ -211,7 +141,6 @@ void unix_client (int fd)
 {
     char temp[PATH_MAX + 128];
     ssize_t bytes_read;
-    gboolean was_empty = FALSE;
 
     memset(temp, 0, sizeof(temp));
     
@@ -221,23 +150,10 @@ void unix_client (int fd)
     if (bytes_read <= 0) return;
     temp[bytes_read] = '\0';
 
-    /* Acquire lock only for shared state mutation/access */
-    thread_lock();
-    
-    was_empty = (queue == NULL);
+    /* Process command - all locking is now handled inside command_process */
+    char *response = command_process(temp);
 
-    int cmd_effect = 0;
-    char *response = command_process(temp, &queue, &playing_mpeg, &cmd_effect);
-
-    unix_command = cmd_effect;
-
-    if (was_empty && queue != NULL) {
-        start_playback_request();
-    }
-    
-    thread_unlock();
-
-    /* Perform socket I/O after releasing the lock */
+    /* Perform socket I/O */
     if (response) {
         dprintf(fd, "%s", response);
         g_free(response);

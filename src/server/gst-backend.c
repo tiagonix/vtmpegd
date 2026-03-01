@@ -47,6 +47,11 @@ int md_gst_is_playing(void)
     GstState current, pending;
     if (!playbin) return 0;
 
+    /* IMPORTANT:
+     * With timeout=0, gst_element_get_state() can return ASYNC even when current
+     * is already READY/NULL. For startup gating we only care about current state,
+     * not the return code.
+     */
     gst_element_get_state(playbin, &current, &pending, 0);
     return (current == GST_STATE_PLAYING || pending == GST_STATE_PLAYING) ? 1 : 0;
 }
@@ -57,11 +62,6 @@ gboolean md_gst_is_stopped(void)
 
     if (!playbin) return TRUE;
 
-    /* IMPORTANT:
-     * With timeout=0, gst_element_get_state() can return ASYNC even when current
-     * is already READY/NULL. For startup gating we only care about current state,
-     * not the return code.
-     */
     gst_element_get_state(playbin, &current, &pending, 0);
 
     /* Consider READY as "stopped enough" for safe start. */
@@ -150,7 +150,7 @@ static void on_about_to_finish(GstElement *playbin_local, gpointer data)
      * SINGLE AUTHORITY for queue advancement.
      * This runs in the streaming thread. No GTK calls allowed.
      */
-    next_filename = unix_getvideo();
+    next_filename = command_get_next_video();
     if (next_filename) {
         g_printerr("Gapless transition to: %s\n", next_filename);
         new_uri = ensure_uri_scheme(next_filename);
@@ -264,6 +264,39 @@ gint md_gst_play(char *uri)
     if (GST_IS_ELEMENT(playbin))
         gst_element_set_state(playbin, GST_STATE_PLAYING);
 
+    return 0;
+}
+
+gint md_gst_pause(void)
+{
+    if (playbin) {
+        gst_element_set_state(playbin, GST_STATE_PAUSED);
+        g_printerr("Pipeline paused.\n");
+    }
+    return 0;
+}
+
+gint md_gst_resume(void)
+{
+    if (playbin) {
+        gst_element_set_state(playbin, GST_STATE_PLAYING);
+        g_printerr("Pipeline resumed.\n");
+    }
+    return 0;
+}
+
+gint md_gst_stop(void)
+{
+    if (playbin) {
+        gst_element_set_state(playbin, GST_STATE_NULL);
+        g_atomic_int_set(&g_next_uri_scheduled, 0);
+        
+        /* Force widget redraw to show standby screen immediately */
+        if (video_widget) {
+            gtk_widget_queue_draw(video_widget);
+        }
+        g_printerr("Pipeline stopped (Standby).\n");
+    }
     return 0;
 }
 

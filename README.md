@@ -75,6 +75,9 @@ Use the `VTqueue` tool to control the server.
 *   **Insert at position:** `./VTqueue -a /path/to/video.mp4 -p 2`
 *   **List queue:** `./VTqueue -l`
 *   **Remove item:** `./VTqueue -r 1`
+*   **Pause Playback:** `./VTqueue --pause` (or `-P`)
+*   **Resume Playback:** `./VTqueue --resume` (or `-R`)
+*   **Stop Playback:** `./VTqueue --stop` (or `-S`)
 
 ## IPC Protocol Specification
 
@@ -106,7 +109,8 @@ Communication occurs over a UNIX domain socket using a simple text-based protoco
 │   │   ├── unix.c        # UNIX Socket server and queue management
 │   │   ├── gst-backend.c # GStreamer pipeline and gapless logic
 │   │   ├── video.c       # GTK Drawing Area and XID embedding
-│   │   └── commands.c    # Protocol command implementation
+│   │   ├── commands.c    # Protocol command implementation
+│   │   └── thread.c      # Thread management helpers
 │   └── client
 │       ├── VTqueue.c     # CLI argument parsing
 │       └── cmd.c         # Socket communication logic
