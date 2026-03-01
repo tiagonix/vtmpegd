@@ -46,3 +46,4 @@ This release marks the "Resurrection" of the VTmpeg engine. The codebase has bee
 - Basic UNIX domain socket control.
 - GStreamer 0.8 integration for basic video playback.
 - Initial contributor credits: Alex Fiori, Arnaldo Pereira, Flávio Mendes.
+- Project Manager: Thiago Camargo
