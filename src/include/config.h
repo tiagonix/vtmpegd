@@ -63,5 +63,6 @@
 #define COMMAND_NEXT    7
 #define COMMAND_PREV    8
 #define COMMAND_MUTE    9
+#define COMMAND_STATUS  10
 
 #endif /* config.h */

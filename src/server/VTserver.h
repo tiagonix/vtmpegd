@@ -57,6 +57,9 @@ extern gint md_gst_finish(void);
 extern int  md_gst_is_playing(void);
 extern void md_gst_set_window_handle(guintptr handle);
 extern gboolean md_gst_is_stopped(void);
+extern gint64 md_gst_get_position(void);
+extern gint64 md_gst_get_duration(void);
+extern char *md_gst_get_current_uri(void);
 
 /* unix.c */
 extern char   *unix_sockname (void);

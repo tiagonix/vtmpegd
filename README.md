@@ -75,6 +75,7 @@ Use the `VTqueue` tool to control the server.
 *   **Insert at position:** `./VTqueue -a /path/to/video.mp4 -p 2`
 *   **List queue:** `./VTqueue -l`
 *   **Remove item:** `./VTqueue -r 1`
+*   **Show Playback Status:** `./VTqueue --status` (or `-s`)
 *   **Pause Playback:** `./VTqueue --pause` (or `-P`)
 *   **Resume Playback:** `./VTqueue --resume` (or `-R`)
 *   **Stop Playback:** `./VTqueue --stop` (or `-S`)
@@ -94,6 +95,7 @@ Communication occurs over a UNIX domain socket using a simple text-based protoco
 | **Next** | `7` | None | `S` (OK) or `E` (Error) + `;` |
 | **Prev** | `8` | None | `S` (OK) or `E` (Error) + `;` |
 | **Mute** | `9` | None | `S` (OK) or `E` (Error) + `;` |
+| **Status** | `10` | None | `S` (OK) + Status/Progress String + `;` |
 
 *Note: The server uses the `S` (Success) and `E` (Error) characters followed by the `;` delimiter for all responses.*
 
