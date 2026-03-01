@@ -11,35 +11,29 @@
 
 static char result_buf[MAX_RESULT_LINE_LEN];
 
-/* return:
- * -1 on system error
- * 0 on error
- * 1 on success
+/*
+ * Sends a command to the server.
+ * Returns:
+ *  -1 on system/socket error
+ *   1 on success (command sent)
+ *
+ * NOTE: This function ONLY sends. All response reading must be handled
+ * by the caller using the stdio FILE* stream.
  */
 int send_cmd(int fd, const char *cmd)
 {
-   	char buf[2];
-	
    	if (!cmd)
 	   	return -1;
 	
     /* SECURITY FIX: Use %s to prevent format string attacks */
 	if (dprintf(fd, "%s", cmd) < 0)
 	   	return -1;
-	//usleep(500);
-
-    /* 
-     * Simplified receive logic:
-     * Rely on SO_RCVTIMEO set in VTqueue.c instead of manual select().
+	
+    /*
+     * The raw read() was removed to prevent mixing I/O paradigms.
+     * The caller is now responsible for reading the entire response,
+     * including status characters, via the buffered FILE* stream.
      */
-    memset(buf, 0, sizeof(buf));
-    if (read(fd, buf, sizeof(buf)) <= 0)
-        return -1;
-
-    if (*buf == COMMAND_ERROR) {
-        return 0;
-    }
-   
 	return 1;
 }
 

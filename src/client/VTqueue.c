@@ -94,13 +94,18 @@ static int VT_send_command(VTCommand *cmd)
     }
 
     if(send_cmd(fd, buffer) <= 0)
-        fprintf(stderr, "error: ");
+        fprintf(stderr, "error sending command\n");
 
     if(!(fp = fdopen(fd, "r"))) {
         perror("fdopen");
         exit(1);
     }
 
+    /*
+     * This loop now correctly handles the entire server response,
+     * including error messages, because send_cmd() no longer consumes
+     * any input from the stream.
+     */
     while((p = get_cmd_result(fp)) != NULL)
         printf("%s", p);
 
