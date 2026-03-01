@@ -222,6 +222,15 @@ char *command_process(const char *payload)
     char *response = NULL;
     gboolean was_empty = FALSE;
 
+    /*
+     * DEADLOCK FIX: COMMAND_STATUS accesses the backend state via md_gst_get_current_uri(),
+     * which acquires the lock itself. We must NOT hold the lock here for STATUS, or we 
+     * will deadlock because PTHREAD_MUTEX_INITIALIZER is non-recursive.
+     */
+    if (command_id == COMMAND_STATUS) {
+        return command_status();
+    }
+
     /* Locking must be handled here to protect queue mutations */
     thread_lock();
     was_empty = (queue == NULL);
@@ -231,9 +240,7 @@ char *command_process(const char *payload)
             response = command_list();
             break;
 
-        case COMMAND_STATUS:
-            response = command_status();
-            break;
+        /* COMMAND_STATUS handled above to prevent deadlock */
 
         case COMMAND_INSERT: {
             int pos = 0;
@@ -280,10 +287,19 @@ char *command_process(const char *payload)
             break;
 
         case COMMAND_PREV: {
-            int t;
-            if ((t = playing_mpeg - 2) < 0) t = g_list_length(queue) - 1;
-            playing_mpeg = t;
-            resume_playback_request(); 
+            if (!g_loop_enabled) {
+                response = g_strdup_printf("%c\nCommand PREV only available in loop mode.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+            } else {
+                int t;
+                /* playing_mpeg points to the NEXT item to play.
+                   So, current = -1, prev = -2. */
+                if ((t = playing_mpeg - 2) < 0) t = g_list_length(queue) - 1;
+                
+                playing_mpeg = t;
+                skip_playback_request(); /* Must use skip to force pipeline transition, resume is passive */
+                
+                response = g_strdup_printf("%c\nSkipping to previous video.\n%c\n", COMMAND_OK, COMMAND_DELIM);
+            }
             break;
         }
 
