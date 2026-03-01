@@ -122,7 +122,6 @@ static int VT_send_command(VTCommand *cmd)
  */
 static void show_help(const char *progname) {
     fprintf(stdout, "use: %s OPTIONS\n"
-            "NOTES  : There are a _lot_ of commands to come.\n"
             "OPTIONS:\n"
             "\t--add,      -a URI       Add URI to server's play queue\n"
             "\t--remove,   -r IDX       Remove IDX from server's play queue\n"

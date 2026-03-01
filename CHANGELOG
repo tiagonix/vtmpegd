@@ -1,3 +1,48 @@
-20050205
-    Initial alpha code, already working with all video types supported by gstreamer.
+# VTmpeg Change Log
 
+All notable changes to this project will be documented in this file.
+The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-03-01
+
+### Summary
+This release marks the "Resurrection" of the VTmpeg engine. The codebase has been completely modernized from its 2001-2005 origins, transitioning from GStreamer 0.8/GTK 2 to GStreamer 1.0/GTK 3. This version stabilizes the IPC protocol, hardens the server against DoS/memory exhaustion, and introduces a professional broadcast-ready rendering pipeline.
+
+### Added
+- **Multimedia:** Implemented gapless playback using the `about-to-finish` signal and playbin3 (where available).
+- **Multimedia:** Added a Cairo-based "OFF AIR" standby screen to prevent X11 ghosting when the queue is idle.
+- **Features:** Added `--loop` flag for persistent playlist cycling.
+- **Features:** Added `--watermark` flag for a hardware-accelerated "VT-TV LIVE" overlay.
+- **Observability:** Added `--status` flag to `VTqueue` for real-time playback and time progression queries.
+- **IPC:** Implemented `PAUSE`, `STOP`, `RESUME`, `NEXT`, `PREV`, and `STATUS` commands in the protocol.
+
+### Changed
+- **Architecture:** Enforced strict Logic Layering (Invariant 3.4). Decoupled the IPC transport (`unix.c`) from command execution logic (`commands.c`).
+- **Core:** Migrated signal handling to the GLib event loop (`g_unix_signal_add`) to ensure async-signal safety and prevent termination deadlocks.
+- **Client:** Refactored `VTqueue` to use `getopt_long` for modern CLI ergonomics.
+- **Client:** Switched IPC read logic to exclusive buffered I/O (`stdio` via `fdopen`) to resolve undefined behavior caused by mixed `read()` calls.
+- **Stability:** Implemented a hard 2048-item limit for the video queue to prevent memory exhaustion.
+- **Stability:** Default playback mode now follows a FIFO consumption model; videos are removed from the queue after playing to ensure stable long-term memory usage.
+
+### Fixed
+- **Security:** Patched a stack buffer overflow in IPC command parsing via constrained `sscanf` sets.
+- **Security:** Fixed a format string vulnerability in the client communication layer.
+- **Hygiene:** Resolved critical Use-After-Free (UAF) vulnerabilities in queue management by switching to deep-copying strings during dispatch.
+- **Hygiene:** Corrected POSIX threading violations where mutexes were not held during conditional waits.
+- **Hygiene:** Fixed linkage ambiguities and C99 portability issues (removed nested functions).
+- **Network:** Fixed a race condition/deadlock in the client by replacing manual `select()` polling with native socket timeouts (`SO_RCVTIMEO`).
+- **Graphics:** Resolved a "black screen" rendering failure by correctly managing GTK 3 `app-paintable` flags and GstVideoOverlay synchronization.
+
+### Removed
+- **Legacy:** Deleted the 20-year-old `TODO` file as all original goals (Daemon stability, CLI improvements) have been achieved.
+- **Legacy:** Removed stale "More commands to come" help text in `VTqueue`.
+- **Legacy:** Dropped support for GStreamer 0.8 and GTK 2.
+
+---
+
+## [0.1.0] - 2005-02-05
+### Added
+- Initial alpha release.
+- Basic UNIX domain socket control.
+- GStreamer 0.8 integration for basic video playback.
+- Initial contributor credits: Alex Fiori, Arnaldo Pereira, Flávio Mendes.
