@@ -68,6 +68,7 @@ extern void    unix_finish   (void);
 
 /* commands.c */
 extern void  commands_init(int loop_enabled);
+extern void  commands_cleanup(void);
 /* Returns a newly allocated string that MUST be freed by the caller. */
 extern char *command_get_next_video(void);
 extern char *command_process(const char *payload);
