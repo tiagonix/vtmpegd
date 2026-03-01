@@ -261,10 +261,14 @@ char *command_process(const char *payload)
         }
 
         case COMMAND_PLAY:
-        case COMMAND_NEXT:
             /* Start or Resume playback */
             resume_playback_request();
             /* If it was empty, start_playback_request below will handle it too. */
+            break;
+            
+        case COMMAND_NEXT:
+            /* Skip forward in the queue */
+            skip_playback_request();
             break;
 
         case COMMAND_PAUSE:
@@ -284,7 +288,7 @@ char *command_process(const char *payload)
         }
 
         case COMMAND_MUTE:
-            /* Not implemented in backend yet */
+            mute_playback_request();
             break;
 
         default:

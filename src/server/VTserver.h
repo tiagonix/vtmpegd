@@ -53,6 +53,8 @@ extern gint md_gst_play(char *uri);
 extern gint md_gst_pause(void);
 extern gint md_gst_resume(void);
 extern gint md_gst_stop(void);
+extern gint md_gst_skip(void);
+extern gint md_gst_toggle_mute(void);
 extern gint md_gst_finish(void);
 extern int  md_gst_is_playing(void);
 extern void md_gst_set_window_handle(guintptr handle);
@@ -82,6 +84,8 @@ extern void start_playback_request(void);
 extern void pause_playback_request(void);
 extern void resume_playback_request(void);
 extern void stop_playback_request(void);
+extern void skip_playback_request(void);
+extern void mute_playback_request(void);
 
 /* copyright.c */
 #define PROGRAM_DESCRIPTION "oO VTmpeg - MPEG video player daemon for Linux Oo"

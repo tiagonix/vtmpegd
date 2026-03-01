@@ -64,6 +64,20 @@ static gboolean idle_stop_playback(gpointer data)
     return FALSE;
 }
 
+static gboolean idle_skip_playback(gpointer data)
+{
+    (void)data;
+    md_gst_skip();
+    return FALSE;
+}
+
+static gboolean idle_mute_playback(gpointer data)
+{
+    (void)data;
+    md_gst_toggle_mute();
+    return FALSE;
+}
+
 /* Public helper called from commands.c */
 void start_playback_request(void)
 {
@@ -83,6 +97,16 @@ void resume_playback_request(void)
 void stop_playback_request(void)
 {
     g_idle_add(idle_stop_playback, NULL);
+}
+
+void skip_playback_request(void)
+{
+    g_idle_add(idle_skip_playback, NULL);
+}
+
+void mute_playback_request(void)
+{
+    g_idle_add(idle_mute_playback, NULL);
 }
 
 /*

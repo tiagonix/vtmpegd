@@ -329,6 +329,38 @@ gint md_gst_stop(void)
     return 0;
 }
 
+gint md_gst_skip(void)
+{
+    if (playbin) {
+        char *next_filename = command_get_next_video();
+        
+        /* Force pipeline reset to purge current buffers and accept new URI cleanly */
+        gst_element_set_state(playbin, GST_STATE_NULL);
+        g_atomic_int_set(&g_next_uri_scheduled, 0);
+        
+        if (next_filename) {
+            g_printerr("Skipping forward to: %s\n", next_filename);
+            md_gst_play(next_filename);
+            g_free(next_filename);
+        } else {
+            g_printerr("Skip requested, but queue is empty.\n");
+            md_gst_stop();
+        }
+    }
+    return 0;
+}
+
+gint md_gst_toggle_mute(void)
+{
+    if (playbin) {
+        gboolean current_mute = FALSE;
+        g_object_get(G_OBJECT(playbin), "mute", &current_mute, NULL);
+        g_object_set(G_OBJECT(playbin), "mute", !current_mute, NULL);
+        g_printerr("Pipeline audio %s.\n", !current_mute ? "muted" : "unmuted");
+    }
+    return 0;
+}
+
 gint md_gst_finish(void)
 {
     if (bus_watch_id > 0)

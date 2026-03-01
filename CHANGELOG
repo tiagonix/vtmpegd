@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-02
+
+### Added
+- **IPC:** Fully implemented `COMMAND_NEXT` (ID 7) to allow immediate skipping to the next video in the playback queue.
+- **IPC:** Fully implemented `COMMAND_MUTE` (ID 9) to toggle audio output state via the GStreamer playbin.
+- **Multimedia:** Added `md_gst_skip` and `md_gst_toggle_mute` to the backend for direct stream and property manipulation.
+
+### Changed
+- **Logic:** Decoupled `COMMAND_NEXT` from `COMMAND_PLAY` in the command layer to ensure correct queue advancement semantics.
+- **Documentation:** Updated the IPC Protocol Specification in `README.md` to reflect that all defined commands are now functional.
+
+---
+
 ## [1.0.0] - 2026-03-01
 
 ### Summary
