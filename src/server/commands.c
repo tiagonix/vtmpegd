@@ -21,6 +21,39 @@ void commands_init(int loop_enabled)
     playing_mpeg = -1;
 }
 
+static char *command_status(void)
+{
+    char *uri = md_gst_get_current_uri();
+    gint64 pos = md_gst_get_position();
+    gint64 dur = md_gst_get_duration();
+    const char *state_str = "Standby";
+
+    if (!md_gst_is_stopped()) {
+        if (md_gst_is_playing()) state_str = "Playing";
+        else state_str = "Paused";
+    }
+
+    long long p_m = (pos / GST_SECOND) / 60;
+    long long p_s = (pos / GST_SECOND) % 60;
+    long long d_m = (dur / GST_SECOND) / 60;
+    long long d_s = (dur / GST_SECOND) % 60;
+
+    GString *response = g_string_new(NULL);
+    g_string_append_printf(response, "%c\n", COMMAND_OK);
+    g_string_append_printf(response, "Status: %s\n", state_str);
+    
+    if (uri) {
+        g_string_append_printf(response, "File: %s\n", uri);
+        g_string_append_printf(response, "Progress: %02lld:%02lld / %02lld:%02lld\n", p_m, p_s, d_m, d_s);
+        g_free(uri);
+    } else {
+        g_string_append_printf(response, "File: None\n");
+    }
+    
+    g_string_append_printf(response, "%c\n", COMMAND_DELIM);
+    return g_string_free(response, FALSE);
+}
+
 static char *command_list (void)
 {
     int i = 0;
@@ -184,6 +217,10 @@ char *command_process(const char *payload)
     switch (command_id) {
         case COMMAND_LIST:
             response = command_list();
+            break;
+
+        case COMMAND_STATUS:
+            response = command_status();
             break;
 
         case COMMAND_INSERT: {

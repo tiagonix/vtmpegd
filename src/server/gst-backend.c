@@ -68,6 +68,35 @@ gboolean md_gst_is_stopped(void)
     return (current == GST_STATE_NULL || current == GST_STATE_READY) ? TRUE : FALSE;
 }
 
+gint64 md_gst_get_position(void)
+{
+    gint64 pos = 0;
+    if (playbin && gst_element_query_position(playbin, GST_FORMAT_TIME, &pos)) {
+        return pos;
+    }
+    return 0;
+}
+
+gint64 md_gst_get_duration(void)
+{
+    gint64 dur = 0;
+    if (playbin && gst_element_query_duration(playbin, GST_FORMAT_TIME, &dur)) {
+        return dur;
+    }
+    return 0;
+}
+
+char *md_gst_get_current_uri(void)
+{
+    char *uri = NULL;
+    thread_lock();
+    if (g_current_uri) {
+        uri = g_strdup(g_current_uri);
+    }
+    thread_unlock();
+    return uri;
+}
+
 void md_gst_set_window_handle(guintptr handle)
 {
     g_window_handle = handle;

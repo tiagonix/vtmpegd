@@ -17,9 +17,10 @@
 #include "config.h"
 
 typedef enum {
-    ADD = 0,
-    REM,
-    LIST,
+    ADD_CMD = 0,
+    REM_CMD,
+    LIST_CMD,
+    STATUS_CMD,
     PAUSE_CMD,
     STOP_CMD,
     RESUME_CMD

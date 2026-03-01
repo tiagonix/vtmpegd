@@ -26,15 +26,18 @@ static int VT_build_command_string(VTCommand *cmd, char *buf, int size)
 
     memset(buf, 0, size);
     switch(cmd->cmd) {
-        case ADD:
+        case ADD_CMD:
             snprintf(buf, size, "%d %s;%d", 
                     COMMAND_INSERT, cmd->uri, cmd->idx);
             break;
-        case REM:
+        case REM_CMD:
             snprintf(buf, size, "%d %d", COMMAND_REMOVE, cmd->idx);
             break;
-        case LIST:
-            snprintf(buf, size, "1");
+        case LIST_CMD:
+            snprintf(buf, size, "%d", COMMAND_LIST);
+            break;
+        case STATUS_CMD:
+            snprintf(buf, size, "%d", COMMAND_STATUS);
             break;
         case PAUSE_CMD:
             snprintf(buf, size, "%d", COMMAND_PAUSE);
@@ -120,6 +123,7 @@ static void show_help(const char *progname) {
             "\t--remove,   -r IDX       Remove IDX from server's play queue\n"
             "\t--position, -p IDX       Queue's index to remove or add the URI into\n"
             "\t--list,     -l           list URIs on the server's queue\n"
+            "\t--status,   -s           Show current playback status and progress\n"
             "\t--pause,    -P           Pause playback\n"
             "\t--resume,   -R           Resume playback\n"
             "\t--stop,     -S           Stop playback\n"
@@ -133,12 +137,13 @@ int main(int argc, char **argv)
 {
     VTCommand cmd;
     int c, optind = 0;
-    const char *opts = "a:r:p:lPRSdh";
+    const char *opts = "a:r:p:lsPRSdh";
     const struct option optl[] = {
         { "add",      1, 0, 'a' },
         { "remove",   1, 0, 'r' },
         { "position", 1, 0, 'p' },
         { "list",     0, 0, 'l' },
+        { "status",   0, 0, 's' },
         { "pause",    0, 0, 'P' },
         { "resume",   0, 0, 'R' },
         { "stop",     0, 0, 'S' },
@@ -151,7 +156,7 @@ int main(int argc, char **argv)
     while((c = getopt_long(argc, argv, opts, optl, &optind)) != -1) {
         switch(c) {
             case 'a':
-                cmd.cmd = ADD;
+                cmd.cmd = ADD_CMD;
                 if(optarg == NULL)
                     show_help(argv[0]);
 
@@ -182,7 +187,7 @@ int main(int argc, char **argv)
                 }
                 break;
             case 'r':
-                cmd.cmd = REM;
+                cmd.cmd = REM_CMD;
                 if(optarg == NULL)
                     show_help(argv[0]);
                 cmd.idx = atoi(optarg);
@@ -193,7 +198,10 @@ int main(int argc, char **argv)
                 cmd.idx = atol(optarg);
                 break;
             case 'l':
-                cmd.cmd = LIST;
+                cmd.cmd = LIST_CMD;
+                break;
+            case 's':
+                cmd.cmd = STATUS_CMD;
                 break;
             case 'P':
                 cmd.cmd = PAUSE_CMD;
@@ -217,8 +225,8 @@ int main(int argc, char **argv)
 
     /* Validation: ADD commands only require a URI (default idx is -1).
        REM commands require a valid position index. */
-    if((cmd.cmd == ADD && strlen(cmd.uri) < 2) || 
-            (cmd.cmd == REM && cmd.idx <= 0))
+    if((cmd.cmd == ADD_CMD && strlen(cmd.uri) < 2) || 
+            (cmd.cmd == REM_CMD && cmd.idx <= 0))
         show_help(argv[0]);
 
     VT_send_command(&cmd);
