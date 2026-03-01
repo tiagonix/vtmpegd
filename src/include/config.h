@@ -24,31 +24,28 @@
 #define VIDEO_DEPTH	16
 
 /*
-  especificação do protocolo
+  IPC Protocol Specification
 
-  o client envia:
-  1. para listar o queue: 1
-  2. para inserir no queue: 2 [filename];[pos]
-  3. para remover do queue: 3 [pos]
+  The client sends a numeric command ID followed by optional arguments.
+  The server responds with a status character (COMMAND_OK/COMMAND_ERROR)
+  and an optional payload, terminated by COMMAND_DELIM.
 
-  o server responde:
-  1. pro comando 'list' (1):
-  
-     COMMAND_OK || COMMAND_ERROR
-     pos - filename
-     COMMAND_DELIM
-     
-     Ex:
-     COMMAND_OK
-     1 - /tmp/video0.mpeg
-     2 - /home/video/test.mpeg
-     COMMAND_DELIM
-
-  2. pro comando 'insert' (2) e 'remove' (3):
-
-     COMMAND_OK || COMMAND_ERROR
-     COMMAND_DELIM
-
+  ID   Command   Arguments              Description
+  --------------------------------------------------------------------
+  1    LIST                             Lists the current video queue.
+  2    INSERT    [filename];[pos]       Inserts a video at a given
+                                        position (0 for end).
+  3    REMOVE    [pos]                  Removes the video at the given
+                                        position.
+  4    PLAY                             Resumes playback.
+  5    PAUSE                            Pauses playback.
+  6    STOP                             Stops playback and returns to
+                                        the standby screen.
+  7    NEXT                             (Server-side only)
+  8    PREV                             (Server-side only)
+  9    MUTE                             (Not implemented)
+  10   STATUS                           Gets current playback status
+                                        and progress.
 */
 #define COMMAND_OK	'S'
 #define COMMAND_ERROR	'E'
