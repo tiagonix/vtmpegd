@@ -283,19 +283,23 @@ char *command_process(const char *payload)
             /* Start or Resume playback */
             resume_playback_request();
             /* If it was empty, start_playback_request below will handle it too. */
+            response = g_strdup_printf("%c\nPlayback resume requested.\n%c\n", COMMAND_OK, COMMAND_DELIM);
             break;
             
         case COMMAND_NEXT:
             /* Skip forward in the queue */
             skip_playback_request();
+            response = g_strdup_printf("%c\nSkip requested.\n%c\n", COMMAND_OK, COMMAND_DELIM);
             break;
 
         case COMMAND_PAUSE:
             pause_playback_request();
+            response = g_strdup_printf("%c\nPlayback pause requested.\n%c\n", COMMAND_OK, COMMAND_DELIM);
             break;
 
         case COMMAND_STOP:
             stop_playback_request();
+            response = g_strdup_printf("%c\nPlayback stop requested.\n%c\n", COMMAND_OK, COMMAND_DELIM);
             break;
 
         case COMMAND_PREV: {
@@ -317,6 +321,7 @@ char *command_process(const char *payload)
 
         case COMMAND_MUTE:
             mute_playback_request();
+            response = g_strdup_printf("%c\nMute toggle requested.\n%c\n", COMMAND_OK, COMMAND_DELIM);
             break;
 
         default:
