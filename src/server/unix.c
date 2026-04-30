@@ -9,7 +9,10 @@
 
 #include "VTserver.h"
 
-static int   server_fd;
+static int   server_fd = -1;
+static pthread_t server_th;
+static gint server_running = 0;
+static int server_thread_started = 0;
 
 static void *unix_loop   (void *arg);
 static void  unix_client (int fd);
@@ -36,7 +39,6 @@ char *unix_sockname (void)
 int unix_server (void)
 {
     int fd;
-    pthread_t th;
     struct sockaddr_un s;
 
     s.sun_family = AF_UNIX;
@@ -60,7 +62,17 @@ int unix_server (void)
     chmod(unix_sockname(), 0666);
 
     server_fd = fd;
-    pthread_create(&th, NULL, unix_loop, NULL);
+    g_atomic_int_set(&server_running, 1);
+    int err = pthread_create(&server_th, NULL, unix_loop, NULL);
+    if (err != 0) {
+        fprintf(stderr, "pthread_create: %s\n", strerror(err));
+        g_atomic_int_set(&server_running, 0);
+        close(fd);
+        server_fd = -1;
+        unlink(unix_sockname());
+        return 0;
+    }
+    server_thread_started = 1;
 
     unlink(UNIX_PATH);
     if (symlink(unix_sockname(), UNIX_PATH) < 0)
@@ -71,8 +83,16 @@ int unix_server (void)
 
 void unix_finish (void)
 {
-    shutdown(server_fd, 2);
-    close(server_fd);
+    g_atomic_int_set(&server_running, 0);
+    if (server_thread_started) {
+        pthread_join(server_th, NULL);
+        server_thread_started = 0;
+    }
+    if (server_fd >= 0) {
+        shutdown(server_fd, 2);
+        close(server_fd);
+        server_fd = -1;
+    }
     return;
 }
 
@@ -89,6 +109,7 @@ void *unix_loop (void *arg)
     fd = server_fd;
 
     for (;;) {
+        if (!g_atomic_int_get(&server_running)) break;
         FD_ZERO(&fds);
         FD_SET(fd, &fds);
         tv.tv_sec = 1; tv.tv_usec = 0;
@@ -99,6 +120,8 @@ void *unix_loop (void *arg)
          */
         int ret = select(fd + 1, &fds, NULL, NULL, &tv);
         if (ret > 0 && FD_ISSET(fd, &fds)) {
+            if (!g_atomic_int_get(&server_running)) break;
+
             /* 
              * FIX: Do not hold lock during accept() or unix_client() which calls read().
              * This prevents DoS where a client connects but doesn't send data.
