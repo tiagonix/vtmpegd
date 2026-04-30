@@ -190,16 +190,19 @@ void finish (void)
 
     if (already_finished) {
         thread_unlock();
-        exit(EXIT_SUCCESS);
+        return;
     }
 
+    already_finished = 1;
+    thread_unlock();
+
     unix_finish();
+
+    thread_lock();
     unlink(unix_sockname());
     commands_cleanup();
 
     g_printerr("Goodbye.\n");
-    already_finished = 1;
-
     thread_unlock();
 
     md_gst_finish();
