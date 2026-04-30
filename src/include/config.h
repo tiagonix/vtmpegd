@@ -43,7 +43,7 @@
                                         the standby screen.
   7    NEXT                             (Server-side only)
   8    PREV                             (Server-side only)
-  9    MUTE                             (Not implemented)
+  9    MUTE                             Server-supported audio mute toggle
   10   STATUS                           Gets current playback status
                                         and progress.
 */

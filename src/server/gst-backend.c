@@ -10,7 +10,7 @@ static GtkWidget  *video_widget;
 static int g_loop_enabled = 0;
 static int g_watermark_enabled = 0;
 static char *g_current_uri = NULL;
-static guintptr g_window_handle = 0;
+static gpointer g_window_handle = NULL;
 static gboolean g_using_gtksink = FALSE;
 
 /*
@@ -99,9 +99,10 @@ char *md_gst_get_current_uri(void)
 
 void md_gst_set_window_handle(guintptr handle)
 {
-    g_window_handle = handle;
+    g_atomic_pointer_set(&g_window_handle, (gpointer)handle);
+    guintptr loaded_handle = (guintptr)g_atomic_pointer_get(&g_window_handle);
     if (playbin && GST_IS_VIDEO_OVERLAY(playbin) && !g_using_gtksink) {
-        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(playbin), g_window_handle);
+        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(playbin), loaded_handle);
     }
 }
 
@@ -114,19 +115,20 @@ static GstBusSyncReply bus_sync_handler(GstBus *bus, GstMessage *msg, gpointer d
         return GST_BUS_PASS;
 
     if (gst_is_video_overlay_prepare_window_handle_message(msg)) {
-        if (g_window_handle != 0) {
+        guintptr window_handle = (guintptr)g_atomic_pointer_get(&g_window_handle);
+        if (window_handle != 0) {
 	    GstObject *src = GST_MESSAGE_SRC(msg);
 
             /* Normal case: message source is the overlay-capable sink. */
             if (GST_IS_VIDEO_OVERLAY(src)) {
-                gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(src), g_window_handle);
+                gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(src), window_handle);
             } else {
                 /* Fallback: try the current playbin video-sink (some graphs emit from a bin/child). */
                 GstElement *vsink = NULL;
                 g_object_get(G_OBJECT(playbin), "video-sink", &vsink, NULL);
                 if (vsink) {
                     if (GST_IS_VIDEO_OVERLAY(vsink)) {
-                        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(vsink), g_window_handle);
+                        gst_video_overlay_set_window_handle(GST_VIDEO_OVERLAY(vsink), window_handle);
                     }
                     gst_object_unref(GST_OBJECT(vsink));
                 }

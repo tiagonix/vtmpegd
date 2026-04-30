@@ -221,6 +221,7 @@ char *command_process(const char *payload)
     int command_id = atoi(payload);
     char *response = NULL;
     gboolean was_empty = FALSE;
+    size_t payload_len = strlen(payload);
 
     /*
      * DEADLOCK FIX: COMMAND_STATUS accesses the backend state via md_gst_get_current_uri(),
@@ -243,27 +244,38 @@ char *command_process(const char *payload)
         /* COMMAND_STATUS handled above to prevent deadlock */
 
         case COMMAND_INSERT: {
-            int pos = 0;
-            int items_matched;
-            char filename[PATH_MAX];
-            char fmt[64];
+            if (payload_len > 2) {
+                int pos = 0;
+                int items_matched;
+                char filename[PATH_MAX];
+                char fmt[64];
 
-            memset(filename, 0, sizeof(filename));
-            snprintf(fmt, sizeof(fmt), "%%%zu[^;];%%d\n", sizeof(filename) - 1);
-            items_matched = sscanf(payload + 2, fmt, filename, &pos);
+                memset(filename, 0, sizeof(filename));
+                snprintf(fmt, sizeof(fmt), "%%%zu[^;];%%d\n", sizeof(filename) - 1);
+                items_matched = sscanf(payload + 2, fmt, filename, &pos);
 
-            if (items_matched != 2) {
-                response = g_strdup_printf("%c\nInvalid IPC payload for INSERT.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+                if (items_matched != 2) {
+                    response = g_strdup_printf("%c\nInvalid IPC payload for INSERT.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+                } else {
+                    response = command_insert(filename, pos);
+                }
             } else {
-                response = command_insert(filename, pos);
+                response = g_strdup_printf("%c\nInvalid IPC payload length.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
             }
             break;
         }
 
         case COMMAND_REMOVE: {
-            int pos = 0;
-            sscanf(payload + 2, "%d\n", &pos);
-            response = command_remove(pos);
+            if (payload_len > 2) {
+                int pos = 0;
+                if (sscanf(payload + 2, "%d\n", &pos) == 1) {
+                    response = command_remove(pos);
+                } else {
+                    response = g_strdup_printf("%c\nInvalid IPC payload format.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+                }
+            } else {
+                response = g_strdup_printf("%c\nInvalid IPC payload length.\n%c\n", COMMAND_ERROR, COMMAND_DELIM);
+            }
             break;
         }
 
